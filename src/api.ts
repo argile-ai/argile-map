@@ -6,22 +6,40 @@ import type {
   DetectionSearchResponse,
 } from "./types";
 
-/** Search buildings by center + radius (meters). */
-export async function searchBuildingsByRadius(params: {
-  lat: number;
-  lng: number;
-  radiusM: number;
+/**
+ * Search every building whose centroid falls inside the viewport bbox. ONE
+ * round trip per viewport change — much cheaper than the previous per-tile
+ * grid that fired dozens of requests per pan.
+ *
+ * The backend caps the query area at MAX_AREA_M2 = 10 km² (see
+ * app/services/cityjson_search.py). At zoom 15 a pitched viewport in
+ * Paris is ~1-2 km², well within the limit.
+ */
+export async function searchBuildingsInBounds(params: {
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
   limit?: number;
   signal?: AbortSignal;
 }): Promise<CityJsonBuilding[]> {
-  const { lat, lng, radiusM, limit = 500, signal } = params;
+  const { bounds, limit = 10_000, signal } = params;
+  const polygon = {
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [bounds.minLng, bounds.minLat],
+        [bounds.maxLng, bounds.minLat],
+        [bounds.maxLng, bounds.maxLat],
+        [bounds.minLng, bounds.maxLat],
+        [bounds.minLng, bounds.minLat],
+      ],
+    ],
+  };
   const response = await fetch(`${config.apiUrl}/cityjson/search`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      center: [lat, lng],
-      radius_m: radiusM,
+      geometry: polygon,
+      crs: "EPSG:4326",
       limit,
     }),
   });

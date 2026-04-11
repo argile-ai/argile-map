@@ -9,9 +9,9 @@ import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
 import { mergeBuildings } from "./mergeBuildings";
 import type { CityJsonBuilding } from "./types";
-import { useTileStatus } from "./useTileStatus";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
+import { useViewportStatus } from "./useViewportStatus";
 import { parseBuildingAsync } from "./workers/parsePool";
 
 /**
@@ -154,7 +154,7 @@ export function App() {
   const buildings = useViewportBuildings(activeBounds);
   const parsed = useParsedBuildings(buildings);
   const origin = useFrozenOrigin(camera);
-  const status = useTileStatus();
+  const status = useViewportStatus();
   const detections = useViewportDetections(activeBounds);
 
   /**
@@ -239,16 +239,18 @@ export function App() {
             </div>
             <div>{detections.length} detections in view</div>
             <div style={{ opacity: 0.75, marginTop: 2 }}>
-              {status.pending > 0
-                ? `Loading ${status.pending} tile${status.pending > 1 ? "s" : ""}…`
-                : `${status.ready} tile${status.ready === 1 ? "" : "s"} loaded`}
+              {status.status === "loading"
+                ? "Loading viewport…"
+                : status.status === "ready"
+                  ? "Loaded"
+                  : status.status === "error"
+                    ? "Failed"
+                    : "Idle"}
             </div>
           </>
         )}
-        {status.error > 0 && (
-          <div style={{ color: "#ff7979", marginTop: 4 }}>
-            {status.error} tile{status.error > 1 ? "s" : ""} failed
-          </div>
+        {status.error && (
+          <div style={{ color: "#ff7979", marginTop: 4 }}>{status.error}</div>
         )}
       </div>
     </div>

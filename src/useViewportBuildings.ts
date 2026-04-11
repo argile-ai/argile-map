@@ -1,18 +1,24 @@
 /**
- * React hook that returns every building currently loaded in the reactive
- * `buildingsCollection`, filtered to the viewport's tile set. Data flow:
+ * React hook that loads every building inside the current viewport via ONE
+ * polygon query (debounced) and returns them reactively through the live
+ * buildingsCollection.
  *
- *   1. Viewport bounds change → recompute visible tile IDs.
- *   2. For each visible tile, kick off `loadTile()` (TanStack Query dedupes).
- *   3. As tiles resolve, they `writeInsert` into `buildingsCollection`.
- *   4. `useLiveQuery` reactively reads the collection and re-renders.
- *   5. Tiles that fall out of view are pruned from the collection.
+ * Previous versions walked a ~400 m tile grid and fired one request per
+ * tile, which at zoom 15 meant ~30 requests per pan. The backend
+ * /cityjson/search already supports polygon queries with a 10 km² area
+ * cap, which is far more than any reasonable zoom-15 viewport.
  */
 
 import { useLiveQuery } from "@tanstack/react-db";
-import { useEffect, useMemo } from "react";
-import { buildingsCollection, loadTile, pruneTiles } from "./collections";
-import { tilesInBounds } from "./tiles";
+import { useEffect } from "react";
+import { searchBuildingsInBounds } from "./api";
+import {
+  buildingsCollection,
+  queryClient,
+  setViewportBuildings,
+  setViewportError,
+  setViewportLoading,
+} from "./collections";
 import type { CityJsonBuilding } from "./types";
 
 export type Bounds = {
@@ -22,28 +28,51 @@ export type Bounds = {
   maxLng: number;
 };
 
-export function useViewportBuildings(bounds: Bounds | null): CityJsonBuilding[] {
-  const tiles = useMemo(() => (bounds ? tilesInBounds(bounds) : []), [bounds]);
-  const tileKey = useMemo(
-    () =>
-      tiles
-        .map((t) => t.id)
-        .sort()
-        .join(","),
-    [tiles],
-  );
+const DEBOUNCE_MS = 300;
 
+/**
+ * Hash the bounds down to ~10 m so small pans reuse the same cache entry
+ * instead of re-fetching. Also used as the TanStack Query cache key.
+ */
+function boundsKey(b: Bounds): string {
+  const r = (n: number) => Math.round(n * 1e4) / 1e4;
+  return `${r(b.minLat)}|${r(b.maxLat)}|${r(b.minLng)}|${r(b.maxLng)}`;
+}
+
+export function useViewportBuildings(bounds: Bounds | null): CityJsonBuilding[] {
   useEffect(() => {
-    const controller = new AbortController();
-    for (const tile of tiles) {
-      loadTile(tile, controller.signal).catch((err) => {
-        if (err?.name !== "AbortError") console.warn("tile load failed", tile.id, err);
-      });
+    if (!bounds) {
+      // Panning below the zoom gate or during initial mount — clear the
+      // visible set so the map doesn't keep stale buildings off-screen.
+      setViewportBuildings([]);
+      return;
     }
-    pruneTiles(new Set(tiles.map((t) => t.id)));
-    return () => controller.abort();
-    // biome-ignore lint/correctness/useExhaustiveDependencies: tileKey captures `tiles`.
-  }, [tileKey]);
+
+    let cancelled = false;
+    setViewportLoading();
+
+    const timer = setTimeout(() => {
+      queryClient
+        .fetchQuery({
+          queryKey: ["viewport", boundsKey(bounds)],
+          queryFn: ({ signal }) => searchBuildingsInBounds({ bounds, signal }),
+        })
+        .then((rows) => {
+          if (cancelled) return;
+          setViewportBuildings(rows);
+        })
+        .catch((err) => {
+          if (cancelled || err?.name === "AbortError") return;
+          console.warn("viewport buildings fetch failed", err);
+          setViewportError(String(err?.message ?? err));
+        });
+    }, DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [bounds]);
 
   const { data } = useLiveQuery((q) => q.from({ b: buildingsCollection }));
   // biome-ignore lint/suspicious/noExplicitAny: useLiveQuery infers the row type.
