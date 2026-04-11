@@ -133,17 +133,37 @@ function buildingsHash(buildings: ParsedBuilding[]): string {
     .join("|");
 }
 
+/**
+ * Below this zoom the viewport spans enough ground that our ~400 m tile
+ * grid would spawn hundreds of requests on every pan. Building data is
+ * only meaningful zoomed in anyway — the map style already has its own
+ * 2D building footprints for the overview.
+ */
+const MIN_ZOOM_FOR_BUILDINGS = 15;
+
 export function App() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [camera, setCamera] = useState<{ lat: number; lng: number } | null>(null);
+  const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
 
-  const buildings = useViewportBuildings(bounds);
+  // Only feed bounds to the data layer once we're zoomed in enough AND
+  // the map has settled. Below the threshold we show nothing rather than
+  // hammering the backend with dozens of tile fetches.
+  const activeBounds = zoom >= MIN_ZOOM_FOR_BUILDINGS ? bounds : null;
+
+  const buildings = useViewportBuildings(activeBounds);
   const parsed = useParsedBuildings(buildings);
   const origin = useFrozenOrigin(camera);
   const status = useTileStatus();
-  const detections = useViewportDetections(bounds);
+  const detections = useViewportDetections(activeBounds);
 
-  const onMove = useCallback((e: { target: unknown }) => {
+  /**
+   * `onMoveEnd` fires once per drag (when the user releases) instead of
+   * the 60 Hz `onMove`. This is critical for the proxy/load flow: every
+   * bounds update triggers tile resolution + fetches, and we don't want
+   * that to run while the camera is still animating.
+   */
+  const onMoveEnd = useCallback((e: { target: unknown }) => {
     // biome-ignore lint/suspicious/noExplicitAny: react-map-gl move event target type.
     const map = e.target as any;
     const b = map.getBounds();
@@ -155,6 +175,7 @@ export function App() {
       maxLng: b.getEast(),
     });
     setCamera({ lat: c.lat, lng: c.lng });
+    setZoom(map.getZoom());
   }, []);
 
   // Merge the parsed buildings into a single TriangleSoup anchored at the
@@ -182,8 +203,8 @@ export function App() {
       <MapGL
         initialViewState={INITIAL_VIEW}
         mapStyle={config.mapStyle}
-        onMove={onMove}
-        onLoad={onMove}
+        onMoveEnd={onMoveEnd}
+        onLoad={onMoveEnd}
         maxPitch={75}
         attributionControl={{ compact: true }}
       >
@@ -207,15 +228,23 @@ export function App() {
         <div>
           <strong>Argile Map</strong>
         </div>
-        <div>
-          {parsed.length} / {buildings.length} buildings rendered
-        </div>
-        <div>{detections.length} detections in view</div>
-        <div style={{ opacity: 0.75, marginTop: 2 }}>
-          {status.pending > 0
-            ? `Loading ${status.pending} tile${status.pending > 1 ? "s" : ""}…`
-            : `${status.ready} tile${status.ready === 1 ? "" : "s"} loaded`}
-        </div>
+        {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
+          <div style={{ opacity: 0.75 }}>
+            Zoom in to load 3D buildings (z≥{MIN_ZOOM_FOR_BUILDINGS})
+          </div>
+        ) : (
+          <>
+            <div>
+              {parsed.length} / {buildings.length} buildings rendered
+            </div>
+            <div>{detections.length} detections in view</div>
+            <div style={{ opacity: 0.75, marginTop: 2 }}>
+              {status.pending > 0
+                ? `Loading ${status.pending} tile${status.pending > 1 ? "s" : ""}…`
+                : `${status.ready} tile${status.ready === 1 ? "" : "s"} loaded`}
+            </div>
+          </>
+        )}
         {status.error > 0 && (
           <div style={{ color: "#ff7979", marginTop: 4 }}>
             {status.error} tile{status.error > 1 ? "s" : ""} failed
