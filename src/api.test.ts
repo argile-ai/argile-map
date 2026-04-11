@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { searchBuildingsByRadius } from "./api";
+import { searchBuildingsByRadius, searchDetectionsByBounds } from "./api";
 
 describe("searchBuildingsByRadius", () => {
   const originalFetch = globalThis.fetch;
@@ -65,5 +65,55 @@ describe("searchBuildingsByRadius", () => {
     await expect(
       searchBuildingsByRadius({ lat: 0, lng: 0, radiusM: 100 }),
     ).rejects.toThrow(/500/);
+  });
+});
+
+describe("searchDetectionsByBounds", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("POSTs a WGS84 polygon to /sat/detections/search and returns detections", async () => {
+    const fakeDet = {
+      building_id: "b1",
+      label: "roof window",
+      score: 0.9,
+      box_xmin: 0,
+      box_ymin: 0,
+      box_xmax: 10,
+      box_ymax: 10,
+      center_lat: 48.86,
+      center_lon: 2.34,
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ count: 1, detections: [fakeDet] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const out = await searchDetectionsByBounds({
+      bounds: { minLat: 48.85, maxLat: 48.87, minLng: 2.33, maxLng: 2.36 },
+      minScore: 0.5,
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toBe("roof window");
+
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const url = call[0];
+    const body = JSON.parse(call[1].body as string);
+    expect(url).toContain("/sat/detections/search");
+    expect(body.crs).toBe("EPSG:4326");
+    expect(body.min_score).toBe(0.5);
+    expect(body.geometry.type).toBe("Polygon");
+    // Closed ring (5 coordinates for a 4-corner rect).
+    expect(body.geometry.coordinates[0]).toHaveLength(5);
+    expect(body.geometry.coordinates[0][0]).toEqual([2.33, 48.85]);
   });
 });

@@ -22,10 +22,14 @@
 // biome-ignore lint/correctness/noUndeclaredDependencies: subpath of a declared dep
 import { CityJSONParser } from "cityjson-threejs-loader/src/parsers/CityJSONParser.js";
 import * as THREE from "three";
-import type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
+import {
+  lambert93Convergence,
+  type ParsedBuilding,
+  type TriangleSoup,
+} from "./mergeBuildings";
 import type { CityJsonBuilding } from "./types";
 
-export { mergeBuildings } from "./mergeBuildings";
+export { mergeBuildings, rotateLambert93ToEastNorth } from "./mergeBuildings";
 export type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
 
 /** Extract the merged triangle soup from every Mesh inside a THREE.Group. */
@@ -101,6 +105,19 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
   const soup = extractTriangleSoup(group);
   if (!soup) return null;
 
+  // The loader preserves raw integer vertices — it doesn't apply the
+  // `transform.scale` / `transform.translate` convention from CityJSON v2.0.
+  // Apply the scale ourselves so we end up in Lambert93 meters. We skip
+  // translate because the re-center step below subtracts the bbox center.
+  const scale = building.cityjson.transform?.scale ?? [1, 1, 1];
+  if (scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1) {
+    for (let i = 0; i < soup.positions.length; i += 3) {
+      soup.positions[i] *= scale[0];
+      soup.positions[i + 1] *= scale[1];
+      soup.positions[i + 2] *= scale[2];
+    }
+  }
+
   // Re-center horizontally at (0,0) and put the ground at z=0. The loader
   // emits vertices in an arbitrary local frame that depends on the building's
   // transform.translate — we don't rely on its absolute value.
@@ -123,10 +140,27 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
   }
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
+
+  // After this loop, (x, y, z) is a Lambert93-local delta around the
+  // building's bbox center with z=0 at the ground. We THEN rotate (x, y)
+  // from Lambert93 axes to WGS84 East/North via the meridian convergence γ
+  // so deck.gl can render the mesh with COORDINATE_SYSTEM.METER_OFFSETS.
+  const gamma = lambert93Convergence(building.lng);
+  const cosG = Math.cos(gamma);
+  const sinG = Math.sin(gamma);
   for (let i = 0; i < soup.positions.length; i += 3) {
-    soup.positions[i] -= cx;
-    soup.positions[i + 1] -= cy;
-    soup.positions[i + 2] -= minZ;
+    const x = soup.positions[i] - cx;
+    const y = soup.positions[i + 1] - cy;
+    const z = soup.positions[i + 2] - minZ;
+    soup.positions[i] = x * cosG + y * sinG;
+    soup.positions[i + 1] = -x * sinG + y * cosG;
+    soup.positions[i + 2] = z;
+  }
+  for (let i = 0; i < soup.normals.length; i += 3) {
+    const nx = soup.normals[i];
+    const ny = soup.normals[i + 1];
+    soup.normals[i] = nx * cosG + ny * sinG;
+    soup.normals[i + 1] = -nx * sinG + ny * cosG;
   }
 
   return {

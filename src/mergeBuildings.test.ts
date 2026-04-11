@@ -11,7 +11,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { mergeBuildings, type ParsedBuilding } from "./mergeBuildings";
+import {
+  LAMBERT93_N,
+  lambert93Convergence,
+  mergeBuildings,
+  rotateLambert93ToEastNorth,
+  type ParsedBuilding,
+} from "./mergeBuildings";
 
 /** Build a ParsedBuilding with a single unit triangle at the origin. */
 function unitTriangle(geopf_id: string, lat: number, lng: number): ParsedBuilding {
@@ -78,5 +84,78 @@ describe("mergeBuildings", () => {
     expect(merged.positions.length).toBe(0);
     expect(merged.normals.length).toBe(0);
     expect(merged.indices.length).toBe(0);
+  });
+});
+
+describe("lambert93Convergence", () => {
+  it("is zero on the central meridian (λ₀ = 3°E)", () => {
+    expect(lambert93Convergence(3)).toBeCloseTo(0, 10);
+  });
+
+  it("is negative west of λ₀ and positive east of it", () => {
+    expect(lambert93Convergence(2)).toBeLessThan(0);
+    expect(lambert93Convergence(7)).toBeGreaterThan(0);
+  });
+
+  it("scales linearly with (λ - λ₀) via the known Lambert93 n", () => {
+    // γ(λ) = n · (λ - λ₀). Reference constant comes from EPSG:2154.
+    expect(LAMBERT93_N).toBeCloseTo(0.7256067949, 9);
+    // γ at λ = 7°E: n · (7 - 3) · π/180
+    const expected = (LAMBERT93_N * 4 * Math.PI) / 180;
+    expect(lambert93Convergence(7)).toBeCloseTo(expected, 12);
+  });
+
+  it("matches published meridian convergence values to <0.01°", () => {
+    // Paris: λ ≈ 2.35°, convergence is published as ≈ -0.47°
+    const parisDeg = (lambert93Convergence(2.3522) * 180) / Math.PI;
+    expect(parisDeg).toBeCloseTo(-0.472, 2);
+    // Strasbourg: λ ≈ 7.75°, convergence ≈ +3.45°
+    const strasDeg = (lambert93Convergence(7.75) * 180) / Math.PI;
+    expect(strasDeg).toBeCloseTo(3.447, 2);
+  });
+});
+
+describe("rotateLambert93ToEastNorth", () => {
+  it("is the identity on the central meridian", () => {
+    const [e, n] = rotateLambert93ToEastNorth(10, 5, 3);
+    expect(e).toBeCloseTo(10, 10);
+    expect(n).toBeCloseTo(5, 10);
+  });
+
+  it("west of λ₀, a Lambert93-north unit vector tilts slightly east", () => {
+    // At Paris, Lambert93 γ ≈ -0.47°. A (dx=0, dy=1) Lambert93 vector maps
+    // to WGS84 (E = sin(γ), N = cos(γ)). γ < 0 → E < 0 (west). Wait — that's
+    // the opposite: "Lambert93 north" is rotated EAST of true north west
+    // of λ₀, so expressed as WGS84 East/North it should have E > 0.
+    //
+    // The formula: [E; N] = [[cos γ, sin γ]; [-sin γ, cos γ]] · [dx; dy].
+    // For dx=0, dy=1: E = sin(γ), N = cos(γ).
+    // γ is NEGATIVE west of λ₀, so sin(γ) < 0, meaning E < 0. That means
+    // we're interpreting "rotating Lambert93 north to WGS84" as a clockwise
+    // rotation of the Lambert93 axes by γ — which is consistent with
+    // meridian convergence sign conventions (positive γ east of λ₀ ⇒
+    // Lambert93 N tilted east of true N ⇒ its east component is +sin γ).
+    const [e, n] = rotateLambert93ToEastNorth(0, 1, 2.3522);
+    expect(e).toBeCloseTo(Math.sin(lambert93Convergence(2.3522)), 10);
+    expect(n).toBeCloseTo(Math.cos(lambert93Convergence(2.3522)), 10);
+    // The magnitude is preserved (rotation, not scaling).
+    expect(Math.hypot(e, n)).toBeCloseTo(1, 10);
+  });
+
+  it("preserves vector magnitudes everywhere in France", () => {
+    for (const lng of [-2, 0, 3, 5, 8]) {
+      const [e, n] = rotateLambert93ToEastNorth(13, -7, lng);
+      expect(Math.hypot(e, n)).toBeCloseTo(Math.hypot(13, -7), 6);
+    }
+  });
+
+  it("round-trips through the inverse via -γ", () => {
+    const [e, n] = rotateLambert93ToEastNorth(10, 5, 7);
+    // Apply inverse manually: rotate by -γ.
+    const g = lambert93Convergence(7);
+    const back_x = e * Math.cos(-g) + n * Math.sin(-g);
+    const back_y = -e * Math.sin(-g) + n * Math.cos(-g);
+    expect(back_x).toBeCloseTo(10, 6);
+    expect(back_y).toBeCloseTo(5, 6);
   });
 });

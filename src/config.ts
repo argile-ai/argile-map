@@ -1,6 +1,7 @@
 export const config = {
+  // /cityjson/search is a public GET endpoint — no auth required. Shipping
+  // an API key to the browser would expose it in the bundle anyway.
   apiUrl: import.meta.env.VITE_ARGILE_API_URL ?? "https://ai-rgile.argile.ai",
-  apiKey: import.meta.env.VITE_ARGILE_API_KEY ?? "",
   mapStyle:
     import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
 } as const;

@@ -45,3 +45,36 @@ export type CityGeometry = {
   };
 };
 
+/**
+ * AI-detected roof feature (roof window, PV panel, chimney) from the
+ * sat-api service (`/sat/detections/search`). The current DB doesn't have
+ * georeferenced bboxes yet, so we only get pixel bboxes + the building
+ * centroid — we render markers at the centroid + a fixed roof elevation.
+ */
+export type DetectionLabel =
+  | "roof window"
+  | "photovoltaic solar panel"
+  | "chimney";
+
+export type Detection = {
+  building_id: string;
+  label: DetectionLabel | string;
+  score: number;
+  box_xmin: number;
+  box_ymin: number;
+  box_xmax: number;
+  box_ymax: number;
+  /** Optional WGS84 georeferenced bbox (only populated for recent imports). */
+  geo_xmin?: number | null;
+  geo_ymin?: number | null;
+  geo_xmax?: number | null;
+  geo_ymax?: number | null;
+  center_lat: number;
+  center_lon: number;
+};
+
+export type DetectionSearchResponse = {
+  count: number;
+  detections: Detection[];
+};
+

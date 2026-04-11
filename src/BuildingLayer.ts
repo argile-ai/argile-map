@@ -7,37 +7,55 @@
  * then draw it as a single instance of a SimpleMeshLayer anchored at a shared
  * origin via COORDINATE_SYSTEM.METER_OFFSETS.
  *
- * Result: one draw call for the entire visible city.
+ * Perf contract:
+ * - The layer id is stable ("argile-buildings") so deck.gl can diff it
+ *   across renders rather than destroying + recreating on every pan.
+ * - The origin is FROZEN by the caller (see useLayerOrigin in App.tsx) so
+ *   small pans don't invalidate the merged mesh. Re-baking the origin is
+ *   only required when we drift more than a few km or the set of buildings
+ *   actually changes.
+ * - The caller memoizes the merged mesh by the set of building ids, so
+ *   identical building sets across renders produce the same mesh reference
+ *   and deck.gl skips the GPU re-upload.
  */
 
 import { COORDINATE_SYSTEM } from "@deck.gl/core";
 import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
-import { mergeBuildings, type ParsedBuilding } from "./cityjsonMesh";
+import type { TriangleSoup } from "./mergeBuildings";
 
 type InstanceDatum = { position: [number, number, number] };
 
+/** The mesh prop shape accepted by deck.gl SimpleMeshLayer. */
+export type DeckMesh = {
+  attributes: {
+    positions: { value: Float32Array; size: 3 };
+    normals: { value: Float32Array; size: 3 };
+  };
+  indices: { value: Uint32Array; size: 1 };
+};
+
+export function toDeckMesh(soup: TriangleSoup): DeckMesh {
+  return {
+    attributes: {
+      positions: { value: soup.positions, size: 3 },
+      normals: { value: soup.normals, size: 3 },
+    },
+    indices: { value: soup.indices, size: 1 },
+  };
+}
+
 export function createBuildingLayer(
-  buildings: ParsedBuilding[],
-  origin: { lat: number; lng: number } | null,
-): SimpleMeshLayer<InstanceDatum> | null {
-  if (!origin || buildings.length === 0) return null;
-
-  const soup = mergeBuildings(buildings, origin);
-
-  // Single "instance" positioned at the origin (0,0 in local meters). All the
-  // per-building placement is already baked into the merged mesh positions.
+  mesh: DeckMesh,
+  origin: { lat: number; lng: number },
+): SimpleMeshLayer<InstanceDatum> {
+  // Single "instance" at the frozen origin — all per-building placement is
+  // already baked into `mesh` via mergeBuildings().
   const data: InstanceDatum[] = [{ position: [0, 0, 0] }];
 
   return new SimpleMeshLayer<InstanceDatum>({
-    id: `argile-buildings-${buildings.length}-${buildings[0]?.geopf_id ?? "x"}`,
+    id: "argile-buildings",
     data,
-    mesh: {
-      attributes: {
-        positions: { value: soup.positions, size: 3 },
-        normals: { value: soup.normals, size: 3 },
-      },
-      indices: { value: soup.indices, size: 1 },
-    },
+    mesh,
     coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
     coordinateOrigin: [origin.lng, origin.lat, 0],
     getPosition: (d) => d.position,
@@ -49,5 +67,11 @@ export function createBuildingLayer(
       specularColor: [60, 64, 70],
     },
     pickable: false,
+    // The mesh reference is stable whenever the building set hasn't
+    // changed (see useLayerMesh in App.tsx), so deck.gl's diffing avoids
+    // GPU re-uploads on pans that don't add/remove buildings.
+    updateTriggers: {
+      mesh: mesh,
+    },
   });
 }

@@ -53,6 +53,29 @@ export const buildingsCollection = createCollection(
 const tileMembership = new Map<TileId, Set<string>>();
 
 /**
+ * Live tile-state map driven by loadTile/pruneTiles. Components can
+ * subscribe via `subscribeTileStatus` to render loading/error UI.
+ */
+export type TileStatus = "pending" | "ready" | "error";
+const tileStatus = new Map<TileId, TileStatus>();
+const tileStatusListeners = new Set<() => void>();
+
+function notifyTileStatus(): void {
+  for (const l of tileStatusListeners) l();
+}
+
+export function getTileStatusSnapshot(): ReadonlyMap<TileId, TileStatus> {
+  return tileStatus;
+}
+
+export function subscribeTileStatus(listener: () => void): () => void {
+  tileStatusListeners.add(listener);
+  return () => {
+    tileStatusListeners.delete(listener);
+  };
+}
+
+/**
  * Fetch a tile (deduplicated via TanStack Query), then push its buildings
  * into the collection. Idempotent: fetching the same tile twice only inserts
  * new buildings once, and writeInsert is a no-op for existing keys.
@@ -60,17 +83,29 @@ const tileMembership = new Map<TileId, Set<string>>();
 export async function loadTile(tile: Tile, signal?: AbortSignal): Promise<void> {
   if (tileMembership.has(tile.id)) return;
 
-  const buildings = await queryClient.fetchQuery({
-    queryKey: ["tile", tile.id],
-    queryFn: ({ signal: qSignal }) =>
-      searchBuildingsByRadius({
-        lat: tile.lat,
-        lng: tile.lng,
-        radiusM: tile.radiusM,
-        limit: 1000,
-        signal: qSignal ?? signal,
-      }),
-  });
+  tileStatus.set(tile.id, "pending");
+  notifyTileStatus();
+
+  let buildings: CityJsonBuilding[];
+  try {
+    buildings = await queryClient.fetchQuery({
+      queryKey: ["tile", tile.id],
+      queryFn: ({ signal: qSignal }) =>
+        searchBuildingsByRadius({
+          lat: tile.lat,
+          lng: tile.lng,
+          radiusM: tile.radiusM,
+          // 10k lets a dense Paris tile land without silent truncation. The
+          // backend enforces its own upper bound via MAX_RADIUS_M / query limit.
+          limit: 10_000,
+          signal: qSignal ?? signal,
+        }),
+    });
+  } catch (err) {
+    tileStatus.set(tile.id, "error");
+    notifyTileStatus();
+    throw err;
+  }
 
   const keys = new Set<string>();
   for (const b of buildings) {
@@ -83,6 +118,8 @@ export async function loadTile(tile: Tile, signal?: AbortSignal): Promise<void> 
     }
   }
   tileMembership.set(tile.id, keys);
+  tileStatus.set(tile.id, "ready");
+  notifyTileStatus();
 }
 
 /**
@@ -108,4 +145,12 @@ export function pruneTiles(keep: Set<TileId>): void {
   for (const k of toDelete) {
     if (buildingsCollection.has(k)) buildingsCollection.delete(k);
   }
+  let statusChanged = false;
+  for (const tileId of [...tileStatus.keys()]) {
+    if (!keep.has(tileId)) {
+      tileStatus.delete(tileId);
+      statusChanged = true;
+    }
+  }
+  if (statusChanged) notifyTileStatus();
 }

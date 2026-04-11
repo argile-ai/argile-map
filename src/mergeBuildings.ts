@@ -6,6 +6,46 @@
  * testable in isolation.
  */
 
+/**
+ * Lambert93 (EPSG:2154) is the CRS of roofer's CityJSON output. It's a
+ * Lambert Conformal Conic with central meridian λ₀ = 3°E and exponent
+ * n = sin(φ₀) ≈ 0.7256067949 (derived from the two standard parallels
+ * 44°N and 49°N). Its easting axis is rotated relative to WGS84 East/North
+ * by the meridian convergence γ = n · (λ - λ₀). We rotate local Lambert93
+ * deltas by γ to express them as WGS84 local East/North meters.
+ *
+ * See: https://epsg.io/2154 — n is exact to 10 digits.
+ */
+export const LAMBERT93_N = 0.7256067949;
+const LAMBERT93_LAMBDA0_RAD = (3 * Math.PI) / 180;
+
+/**
+ * Meridian convergence γ at a given WGS84 longitude (in degrees). Radians.
+ * Positive γ means Lambert93 N is tilted east of true north (i.e. the
+ * longitude is east of the central meridian).
+ */
+export function lambert93Convergence(lngDeg: number): number {
+  return LAMBERT93_N * ((lngDeg * Math.PI) / 180 - LAMBERT93_LAMBDA0_RAD);
+}
+
+/**
+ * Rotate a Lambert93-local (dx, dy) delta into a WGS84 (east, north) delta,
+ * applying the meridian convergence at `lngDeg`.
+ *
+ *   ┌ east  ┐   ┌  cos γ   sin γ ┐ ┌ dx ┐
+ *   └ north ┘ = └ -sin γ   cos γ ┘ └ dy ┘
+ */
+export function rotateLambert93ToEastNorth(
+  dx: number,
+  dy: number,
+  lngDeg: number,
+): [number, number] {
+  const g = lambert93Convergence(lngDeg);
+  const c = Math.cos(g);
+  const s = Math.sin(g);
+  return [dx * c + dy * s, -dx * s + dy * c];
+}
+
 export type TriangleSoup = {
   /** (east, north, up) in meters, relative to the building's local origin. */
   positions: Float32Array;
