@@ -1,7 +1,6 @@
 /**
  * Parse a CityJSON building into a set of triangles (positions + normals +
- * indices) in local meters. The result is ready to be merged into a deck.gl
- * SimpleMeshLayer.
+ * indices) in local meters, ready to be merged into a deck.gl SimpleMeshLayer.
  *
  * We use cityjson-threejs-loader (same parser as argile-web-ui) because
  * CityJSON boundaries are hierarchical (Solid → Shell → Surface → Ring →
@@ -12,6 +11,10 @@
  * applying the transform. The loader builds a THREE.BufferGeometry that
  * preserves this layout. We do NOT rotate to Y-up: deck.gl uses Z-up for
  * geographic data, which matches CityJSON directly.
+ *
+ * The `mergeBuildings` function is defined in `./mergeBuildings` so it can be
+ * unit-tested without importing the loader (whose ESM imports omit `.js`
+ * extensions and break Vitest's strict resolver).
  */
 
 // Import directly from the parser subpath to avoid pulling the worker-based
@@ -19,16 +22,11 @@
 // biome-ignore lint/correctness/noUndeclaredDependencies: subpath of a declared dep
 import { CityJSONParser } from "cityjson-threejs-loader/src/parsers/CityJSONParser.js";
 import * as THREE from "three";
+import type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
 import type { CityJsonBuilding } from "./types";
 
-export type TriangleSoup = {
-  /** (east, north, up) in meters, relative to the building's local origin. */
-  positions: Float32Array;
-  /** per-vertex normal, same layout as positions */
-  normals: Float32Array;
-  /** triangle indices into positions/normals */
-  indices: Uint32Array;
-};
+export { mergeBuildings } from "./mergeBuildings";
+export type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
 
 /** Extract the merged triangle soup from every Mesh inside a THREE.Group. */
 function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
@@ -44,8 +42,6 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
     const geom = obj.geometry as THREE.BufferGeometry | null;
     if (!geom) return;
 
-    // Make sure we have both positions and normals. If the loader didn't emit
-    // normals, compute them here.
     const posAttr = geom.getAttribute("position") as THREE.BufferAttribute | undefined;
     if (!posAttr) return;
     if (!geom.getAttribute("normal")) {
@@ -53,8 +49,6 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
     }
     const normAttr = geom.getAttribute("normal") as THREE.BufferAttribute;
 
-    // Apply any parent transforms baked into obj.matrixWorld so vertices end
-    // up in the root group's frame.
     const m = obj.matrixWorld;
     const v = new THREE.Vector3();
     const n = new THREE.Vector3();
@@ -86,18 +80,6 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
     indices: new Uint32Array(indices),
   };
 }
-
-export type ParsedBuilding = {
-  geopf_id: string;
-  /** WGS84 centroid of the building, used as the anchor for the local frame. */
-  lat: number;
-  lng: number;
-  /** Triangle soup in local meters (east/north/up). Positions are re-centered
-   *  so that x=y=0 sits at the building's footprint centroid. */
-  soup: TriangleSoup;
-  /** Height above local Z-origin of the highest triangle, for UI / culling. */
-  height: number;
-};
 
 /**
  * Parse a CityJSON building into a ready-to-merge triangle soup. Returns null
@@ -154,58 +136,4 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
     soup,
     height: Math.max(0, maxZ - minZ),
   };
-}
-
-/**
- * Merge N parsed buildings into a single triangle soup, baking each building's
- * (lng, lat) offset into the vertex positions. The resulting soup is expressed
- * in meters relative to `origin` (a lng/lat anchor).
- *
- * This lets us render the whole visible city with a SINGLE deck.gl draw call.
- */
-export function mergeBuildings(
-  buildings: ParsedBuilding[],
-  origin: { lat: number; lng: number },
-): TriangleSoup {
-  // Flat-earth approximation: at Paris latitude, the error over 1 km is ~1 mm.
-  const R = 6_378_137;
-  const latRad = (origin.lat * Math.PI) / 180;
-  const metersPerDegLat = (Math.PI * R) / 180;
-  const metersPerDegLng = metersPerDegLat * Math.cos(latRad);
-
-  let totalVerts = 0;
-  let totalIdx = 0;
-  for (const b of buildings) {
-    totalVerts += b.soup.positions.length;
-    totalIdx += b.soup.indices.length;
-  }
-  const mergedPositions = new Float32Array(totalVerts);
-  const mergedNormals = new Float32Array(totalVerts);
-  const mergedIndices = new Uint32Array(totalIdx);
-
-  let vWrite = 0;
-  let iWrite = 0;
-  let vOffset = 0;
-  for (const b of buildings) {
-    const east = (b.lng - origin.lng) * metersPerDegLng;
-    const north = (b.lat - origin.lat) * metersPerDegLat;
-    const pos = b.soup.positions;
-    const nrm = b.soup.normals;
-    for (let i = 0; i < pos.length; i += 3) {
-      mergedPositions[vWrite] = pos[i] + east;
-      mergedPositions[vWrite + 1] = pos[i + 1] + north;
-      mergedPositions[vWrite + 2] = pos[i + 2];
-      mergedNormals[vWrite] = nrm[i];
-      mergedNormals[vWrite + 1] = nrm[i + 1];
-      mergedNormals[vWrite + 2] = nrm[i + 2];
-      vWrite += 3;
-    }
-    const idx = b.soup.indices;
-    for (let i = 0; i < idx.length; i++) {
-      mergedIndices[iWrite++] = idx[i] + vOffset;
-    }
-    vOffset += pos.length / 3;
-  }
-
-  return { positions: mergedPositions, normals: mergedNormals, indices: mergedIndices };
 }

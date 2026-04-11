@@ -1,23 +1,35 @@
 /**
- * TanStack DB: one collection per geo tile. Each collection fetches its
- * buildings on first access via `createCollection(queryCollectionOptions)`.
+ * Reactive building store.
  *
- * We intentionally create collections lazily (via `getTileCollection`) so that
- * moving the map only spins up new ones for tiles we haven't seen before, and
- * TanStack DB caches the rest.
+ * Architecture:
+ *   ┌──────────────┐   fetch-per-tile   ┌──────────────────────┐
+ *   │ TanStack     │ ◄───────────────── │ useVisibleTiles      │
+ *   │ Query cache  │   (queryClient)    │ (viewport → tileIds) │
+ *   └──────┬───────┘                    └──────────────────────┘
+ *          │ on each resolved tile
+ *          ▼ writeInsert()
+ *   ┌──────────────────────────┐    useLiveQuery     ┌──────────────┐
+ *   │ buildingsCollection      │ ◄──────────────────▶│ <App/> render│
+ *   │ (local-only, reactive)   │                     └──────────────┘
+ *   └──────────────────────────┘
+ *
+ * There is exactly ONE TanStack DB collection — the unified set of every
+ * building ever fetched in the current session. Per-tile TanStack Query
+ * handles network caching / deduplication; as each tile resolves we
+ * `writeInsert` its buildings into the collection. The collection's reactive
+ * `useLiveQuery` drives the deck.gl layer.
  */
 
-import { createCollection } from "@tanstack/db";
+import { createCollection, localOnlyCollectionOptions } from "@tanstack/react-db";
 import { QueryClient } from "@tanstack/query-core";
-import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { searchBuildingsByRadius } from "./api";
 import type { Tile, TileId } from "./tiles";
 import type { CityJsonBuilding } from "./types";
 
+/** TanStack Query client used as a per-tile HTTP cache. */
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Tiles rarely change — keep them cached for the session.
       staleTime: Number.POSITIVE_INFINITY,
       gcTime: 1000 * 60 * 30,
       retry: 1,
@@ -25,47 +37,75 @@ export const queryClient = new QueryClient({
   },
 });
 
-// biome-ignore lint/suspicious/noExplicitAny: the collection type depends on
-// the exact options bag, which is awkward to name. We only rely on the subset
-// that is shared by every collection (subscribeChanges, cleanup).
-type TileCollection = any;
+/**
+ * The single source of truth for rendered buildings. Local-only, so it
+ * doesn't round-trip data through TanStack Query — we feed it via
+ * `writeInsert` from our own fetcher.
+ */
+export const buildingsCollection = createCollection(
+  localOnlyCollectionOptions<CityJsonBuilding, string>({
+    id: "buildings",
+    getKey: (b) => b.geopf_id,
+  }),
+);
 
-const tileCollections = new Map<TileId, TileCollection>();
+/** Remember which tile each building came from, so we can evict by tile. */
+const tileMembership = new Map<TileId, Set<string>>();
 
-export function getTileCollection(tile: Tile): TileCollection {
-  const cached = tileCollections.get(tile.id);
-  if (cached) return cached;
+/**
+ * Fetch a tile (deduplicated via TanStack Query), then push its buildings
+ * into the collection. Idempotent: fetching the same tile twice only inserts
+ * new buildings once, and writeInsert is a no-op for existing keys.
+ */
+export async function loadTile(tile: Tile, signal?: AbortSignal): Promise<void> {
+  if (tileMembership.has(tile.id)) return;
 
-  const collection = createCollection(
-    queryCollectionOptions({
-      id: `tile-${tile.id}`,
-      queryKey: ["tile", tile.id],
-      queryClient,
-      getKey: (b: CityJsonBuilding) => b.geopf_id,
-      queryFn: async ({ signal }) => {
-        const buildings = await searchBuildingsByRadius({
-          lat: tile.lat,
-          lng: tile.lng,
-          radiusM: tile.radiusM,
-          // One tile is ~400m across → most city blocks are <300 buildings.
-          // 1000 is a safe ceiling; the backend enforces its own upper bound.
-          limit: 1000,
-          signal,
-        });
-        return buildings;
-      },
-    }),
-  );
-  tileCollections.set(tile.id, collection);
-  return collection;
+  const buildings = await queryClient.fetchQuery({
+    queryKey: ["tile", tile.id],
+    queryFn: ({ signal: qSignal }) =>
+      searchBuildingsByRadius({
+        lat: tile.lat,
+        lng: tile.lng,
+        radiusM: tile.radiusM,
+        limit: 1000,
+        signal: qSignal ?? signal,
+      }),
+  });
+
+  const keys = new Set<string>();
+  for (const b of buildings) {
+    keys.add(b.geopf_id);
+    // Skip inserts for buildings already present — a building that spills
+    // into two adjacent tiles is inserted once. local-only collections throw
+    // on duplicate keys, so we check `.has()` first.
+    if (!buildingsCollection.has(b.geopf_id)) {
+      buildingsCollection.insert(b);
+    }
+  }
+  tileMembership.set(tile.id, keys);
 }
 
-/** Drop tile collections that haven't been visible for a while. */
-export function pruneTileCollections(keepIds: Set<TileId>): void {
-  for (const [id, collection] of tileCollections) {
-    if (!keepIds.has(id)) {
-      collection.cleanup();
-      tileCollections.delete(id);
+/**
+ * Drop tiles that fell outside the viewport. Buildings unique to those tiles
+ * are removed from the collection; buildings also owned by a visible tile
+ * stay (they're re-inserted on first load via `loadTile`).
+ */
+export function pruneTiles(keep: Set<TileId>): void {
+  const keptKeys = new Set<string>();
+  for (const [tileId, keys] of tileMembership) {
+    if (keep.has(tileId)) {
+      for (const k of keys) keptKeys.add(k);
     }
+  }
+  const toDelete: string[] = [];
+  for (const [tileId, keys] of tileMembership) {
+    if (keep.has(tileId)) continue;
+    for (const k of keys) {
+      if (!keptKeys.has(k)) toDelete.push(k);
+    }
+    tileMembership.delete(tileId);
+  }
+  for (const k of toDelete) {
+    if (buildingsCollection.has(k)) buildingsCollection.delete(k);
   }
 }

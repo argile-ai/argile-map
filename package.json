@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome format --write ."
   },
@@ -30,12 +32,15 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.11",
+    "@testing-library/react": "^16.3.2",
     "@types/proj4": "^2.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.1",
     "@types/three": "^0.165.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "happy-dom": "^20.8.9",
     "typescript": "^5.9.3",
-    "vite": "^8.0.8"
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   }
 }
