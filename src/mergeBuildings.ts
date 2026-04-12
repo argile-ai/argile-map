@@ -51,6 +51,9 @@ export type TriangleSoup = {
   positions: Float32Array;
   normals: Float32Array;
   indices: Uint32Array;
+  /** Per-vertex surface type from the CityJSON loader:
+   *  0=GroundSurface, 1=WallSurface, 2=RoofSurface, -1=unknown */
+  surfaceTypes: Int32Array;
 };
 
 export type ParsedBuilding = {
@@ -62,6 +65,11 @@ export type ParsedBuilding = {
   soup: TriangleSoup;
   /** Height of the highest triangle above the local z origin. */
   height: number;
+  /** Centroid of the roof surface (surfacetype=2), in local meters, or null
+   *  if no roof triangles were found. */
+  roofCentroid: [number, number, number] | null;
+  /** Average unit normal of the roof surface, or null if none found. */
+  roofNormal: [number, number, number] | null;
 };
 
 /**
@@ -115,5 +123,10 @@ export function mergeBuildings(
     vOffset += pos.length / 3;
   }
 
-  return { positions: mergedPositions, normals: mergedNormals, indices: mergedIndices };
+  return {
+    positions: mergedPositions,
+    normals: mergedNormals,
+    indices: mergedIndices,
+    surfaceTypes: new Int32Array(0), // not needed for the merged building mesh
+  };
 }

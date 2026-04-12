@@ -3,17 +3,10 @@
  * Web Worker that parses CityJSON buildings off the main thread.
  *
  * Protocol:
- *   main → worker: { building: CityJsonBuilding }      (via postMessage)
- *   worker → main: { id, result: { lat, lng, height, positions, normals, indices } | null }
+ *   main → worker: { id, building }
+ *   worker → main: { id, result: { ...parsed fields } | null }
  *
- * The response arrays are transferred (not cloned) via the Transferable API
- * so there's zero main-thread memcpy on the hot path. If parsing fails we
- * return `result: null` and the main thread skips the building silently.
- *
- * We import `parseBuilding` from cityjsonMesh.ts here — that file imports
- * cityjson-threejs-loader and three.js, which is fine in a Worker because
- * Vite transforms the worker bundle with its normal resolver (unlike Vitest
- * which is stricter).
+ * The TypedArray buffers are transferred (zero main-thread memcpy).
  */
 
 import { parseBuilding } from "../cityjsonMesh";
@@ -24,29 +17,27 @@ type InMessage = {
   building: CityJsonBuilding;
 };
 
-type OutMessage =
-  | {
-      id: string;
-      result: {
-        lat: number;
-        lng: number;
-        height: number;
-        positions: Float32Array;
-        normals: Float32Array;
-        indices: Uint32Array;
-      };
-    }
-  | { id: string; result: null };
+type OutResult = {
+  lat: number;
+  lng: number;
+  height: number;
+  positions: Float32Array;
+  normals: Float32Array;
+  indices: Uint32Array;
+  surfaceTypes: Int32Array;
+  roofCentroid: [number, number, number] | null;
+  roofNormal: [number, number, number] | null;
+};
 
-// eslint-disable-next-line no-restricted-globals
+type OutMessage = { id: string; result: OutResult | null };
+
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
 scope.onmessage = (e: MessageEvent<InMessage>) => {
   const { id, building } = e.data;
   const parsed = parseBuilding(building);
   if (!parsed) {
-    const msg: OutMessage = { id, result: null };
-    scope.postMessage(msg);
+    scope.postMessage({ id, result: null } satisfies OutMessage);
     return;
   }
 
@@ -59,6 +50,9 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
       positions: parsed.soup.positions,
       normals: parsed.soup.normals,
       indices: parsed.soup.indices,
+      surfaceTypes: parsed.soup.surfaceTypes,
+      roofCentroid: parsed.roofCentroid,
+      roofNormal: parsed.roofNormal,
     },
   };
 
@@ -66,5 +60,6 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
     parsed.soup.positions.buffer,
     parsed.soup.normals.buffer,
     parsed.soup.indices.buffer,
+    parsed.soup.surfaceTypes.buffer,
   ]);
 };

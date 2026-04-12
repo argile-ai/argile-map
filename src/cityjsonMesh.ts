@@ -32,11 +32,18 @@ import type { CityJsonBuilding } from "./types";
 export { mergeBuildings, rotateLambert93ToEastNorth } from "./mergeBuildings";
 export type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
 
+/**
+ * CityJSON surface type indices (from defaultSemanticsColors in the loader):
+ *   0 = GroundSurface, 1 = WallSurface, 2 = RoofSurface
+ */
+const SURFACE_TYPE_ROOF = 2;
+
 /** Extract the merged triangle soup from every Mesh inside a THREE.Group. */
 function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
+  const surfaceTypes: number[] = [];
   let vertexOffset = 0;
 
   root.updateMatrixWorld(true);
@@ -52,6 +59,9 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
       geom.computeVertexNormals();
     }
     const normAttr = geom.getAttribute("normal") as THREE.BufferAttribute;
+    // The cityjson-threejs-loader stores surface type as an Int32 attribute
+    // named "surfacetype" on CityObjectsMesh geometries.
+    const stAttr = geom.getAttribute("surfacetype") as THREE.BufferAttribute | undefined;
 
     const m = obj.matrixWorld;
     const v = new THREE.Vector3();
@@ -65,6 +75,7 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
         .applyMatrix3(normalMatrix)
         .normalize();
       normals.push(n.x, n.y, n.z);
+      surfaceTypes.push(stAttr ? stAttr.getX(i) : -1);
     }
 
     const idx = geom.getIndex();
@@ -82,6 +93,7 @@ function extractTriangleSoup(root: THREE.Object3D): TriangleSoup | null {
     positions: new Float32Array(positions),
     normals: new Float32Array(normals),
     indices: new Uint32Array(indices),
+    surfaceTypes: new Int32Array(surfaceTypes),
   };
 }
 
@@ -163,11 +175,43 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
     soup.normals[i + 1] = -nx * sinG + ny * cosG;
   }
 
+  // Compute roof centroid + average normal from surfacetype=2 vertices
+  // (after re-centering + rotation, so they're in the local East/North frame).
+  let roofCentroid: [number, number, number] | null = null;
+  let roofNormal: [number, number, number] | null = null;
+  {
+    let rx = 0;
+    let ry = 0;
+    let rz = 0;
+    let rnx = 0;
+    let rny = 0;
+    let rnz = 0;
+    let roofVerts = 0;
+    for (let i = 0; i < soup.surfaceTypes.length; i++) {
+      if (soup.surfaceTypes[i] === SURFACE_TYPE_ROOF) {
+        rx += soup.positions[i * 3];
+        ry += soup.positions[i * 3 + 1];
+        rz += soup.positions[i * 3 + 2];
+        rnx += soup.normals[i * 3];
+        rny += soup.normals[i * 3 + 1];
+        rnz += soup.normals[i * 3 + 2];
+        roofVerts++;
+      }
+    }
+    if (roofVerts > 0) {
+      roofCentroid = [rx / roofVerts, ry / roofVerts, rz / roofVerts];
+      const len = Math.hypot(rnx, rny, rnz) || 1;
+      roofNormal = [rnx / len, rny / len, rnz / len];
+    }
+  }
+
   return {
     geopf_id: building.geopf_id,
     lat: building.lat,
     lng: building.lng,
     soup,
     height: Math.max(0, maxZ - minZ),
+    roofCentroid,
+    roofNormal,
   };
 }

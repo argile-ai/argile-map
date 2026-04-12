@@ -227,10 +227,9 @@ export function App() {
     // biome-ignore lint/suspicious/noExplicitAny: deck.gl Layer generic bleed.
     const out: any[] = [];
     if (mesh && origin) out.push(createBuildingLayer(mesh, origin));
-    const detLayer = createDetectionLayer(detections);
-    if (detLayer) out.push(detLayer);
+    out.push(...createDetectionLayer(detections, parsed, origin));
     return out;
-  }, [mesh, origin, detections]);
+  }, [mesh, origin, detections, parsed]);
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>

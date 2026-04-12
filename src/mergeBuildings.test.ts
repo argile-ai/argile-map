@@ -30,7 +30,10 @@ function unitTriangle(geopf_id: string, lat: number, lng: number): ParsedBuildin
       positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
       normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
       indices: new Uint32Array([0, 1, 2]),
+      surfaceTypes: new Int32Array([2, 2, 2]),
     },
+    roofCentroid: [0.33, 0.33, 0],
+    roofNormal: [0, 0, 1],
   };
 }
 

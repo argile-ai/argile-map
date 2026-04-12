@@ -39,6 +39,9 @@ function ensureWorkers(): Worker[] {
           positions: Float32Array;
           normals: Float32Array;
           indices: Uint32Array;
+          surfaceTypes: Int32Array;
+          roofCentroid: [number, number, number] | null;
+          roofNormal: [number, number, number] | null;
         } | null;
       };
       const cb = pending.get(id);
@@ -57,7 +60,10 @@ function ensureWorkers(): Worker[] {
           positions: result.positions,
           normals: result.normals,
           indices: result.indices,
+          surfaceTypes: result.surfaceTypes,
         },
+        roofCentroid: result.roofCentroid,
+        roofNormal: result.roofNormal,
       });
     };
     w.onerror = (err) => {
