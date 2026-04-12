@@ -13,29 +13,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          command_timeout: 10m
-          script: |
-            set -euxo pipefail
-            cd /home/ubuntu/src
+          node-version: 22
 
-            # Clone or update the repo
-            if [ -d argile-map ]; then
-              cd argile-map
-              git fetch origin main
-              git reset --hard origin/main
-            else
-              git clone git@github.com:argile-ai/argile-map.git
-              cd argile-map
-            fi
+      - name: Install & Build
+        env:
+          VITE_ARGILE_API_URL: https://ai-rgile.argile.ai
+        run: |
+          npm ci
+          npm run build
 
-            # Build + (re)start the container
-            docker compose build
-            docker compose up -d
-
-            echo "=== Deployed to map.argile.ai ==="
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name argile-map --branch main
