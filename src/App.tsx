@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map as MapGL, useControl, type MapRef } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { AddressSearch } from "./AddressSearch";
 import { createBuildingLayer, toDeckMesh } from "./BuildingLayer";
 import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
@@ -179,6 +180,10 @@ export function App() {
     setZoom(map.getZoom());
   }, []);
 
+  const onAddressSelect = useCallback((lat: number, lng: number) => {
+    mapRef.current?.flyTo({ center: [lng, lat], zoom: 17, pitch: 60, duration: 1500 });
+  }, []);
+
   // Hide the basemap's shoe-box fill-extrusion building layer when we have
   // real CityJSON meshes. Show it again when we zoom out or have no buildings.
   const hasCityJsonBuildings = parsed.length > 0;
@@ -244,6 +249,7 @@ export function App() {
       >
         <DeckGLOverlay layers={layers} />
       </MapGL>
+      <AddressSearch onSelect={onAddressSelect} />
       <div
         style={{
           position: "absolute",
