@@ -1,6 +1,6 @@
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Map as MapGL, useControl } from "react-map-gl/maplibre";
+import { Map as MapGL, useControl, type MapRef } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { createBuildingLayer, toDeckMesh } from "./BuildingLayer";
@@ -142,6 +142,7 @@ function buildingsHash(buildings: ParsedBuilding[]): string {
 const MIN_ZOOM_FOR_BUILDINGS = 15;
 
 export function App() {
+  const mapRef = useRef<MapRef>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [camera, setCamera] = useState<{ lat: number; lng: number } | null>(null);
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
@@ -178,6 +179,30 @@ export function App() {
     setZoom(map.getZoom());
   }, []);
 
+  // Hide the basemap's shoe-box fill-extrusion building layer when we have
+  // real CityJSON meshes. Show it again when we zoom out or have no buildings.
+  const hasCityJsonBuildings = parsed.length > 0;
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const toggle = () => {
+      const style = map.getStyle();
+      if (!style?.layers) return;
+      for (const layer of style.layers) {
+        if (layer.type === "fill-extrusion" && /building/i.test(layer.id)) {
+          map.setLayoutProperty(
+            layer.id,
+            "visibility",
+            hasCityJsonBuildings ? "none" : "visible",
+          );
+        }
+      }
+    };
+    // The style might not be loaded yet on first mount.
+    if (map.isStyleLoaded()) toggle();
+    else map.once("styledata", toggle);
+  }, [hasCityJsonBuildings]);
+
   // Merge the parsed buildings into a single TriangleSoup anchored at the
   // frozen origin. Memoized by (building set hash, origin) — pans that don't
   // change either return the exact same mesh reference so deck.gl skips the
@@ -201,6 +226,7 @@ export function App() {
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <MapGL
+        ref={mapRef}
         initialViewState={INITIAL_VIEW}
         mapStyle={config.mapStyle}
         onMoveEnd={onMoveEnd}
