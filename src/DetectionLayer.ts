@@ -2,16 +2,14 @@
  * deck.gl layer that renders AI-detected roof features as colored 3D panels
  * on each building's CityJSON roof surface.
  *
- * For each detection, we:
+ * For each detection with geo bboxes, we:
  *   1. Match it to the closest ParsedBuilding by lat/lng proximity
- *   2. Use that building's roofCentroid + roofNormal (computed during parse)
- *   3. Create a small colored quad oriented along the roof surface
- *   4. Merge all panels into one SimpleMeshLayer (single draw call)
- *
- * Without georeferenced detection bboxes (the current sat DB only has pixel
- * bboxes), all panels for a given building sit near the roof centroid, offset
- * slightly to avoid z-fighting. Once the backend re-imports with geo_*
- * fields, we can place each panel at its real lat/lng on the roof.
+ *   2. Convert the detection's geo center to the building's local meter frame
+ *   3. Find the roof triangle containing that XY point (barycentric test)
+ *   4. Interpolate Z + get the triangle's normal
+ *   5. Build a coordinate frame (normal + slope-down + right) so the panel
+ *      lies flat on the roof slope — matching argile-web-ui's approach
+ *   6. Merge all panels into one SimpleMeshLayer per label (single draw call)
  */
 
 import { COORDINATE_SYSTEM } from "@deck.gl/core";
@@ -20,10 +18,9 @@ import type { DeckMesh } from "./BuildingLayer";
 import type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
 import type { Detection } from "./types";
 
-const PANEL_HALF_W = 0.6; // meters (half-width of the panel quad)
-const PANEL_HALF_H = 0.4;
+const SURFACE_OFFSET = 0.05; // meters above roof surface
 
-/** Colors per label (RGBA 0-255). Used for getColor on the merged layer. */
+/** Colors per label (RGBA 0-255). */
 function colorForLabel(label: string): [number, number, number, number] {
   switch (label) {
     case "roof window":
@@ -37,16 +34,207 @@ function colorForLabel(label: string): [number, number, number, number] {
   }
 }
 
+// -- Roof triangle lookup (ported from argile-web-ui createRoofWindowOverlayMesh.ts) --
+
+const SURFACE_TYPE_ROOF = 2;
+
+/** Extract only roof triangle positions from a ParsedBuilding's soup. */
+function extractRoofPositions(b: ParsedBuilding): Float32Array {
+  const positions: number[] = [];
+  const { soup } = b;
+  // The soup uses indexed triangles; walk the index buffer in groups of 3.
+  for (let i = 0; i < soup.indices.length; i += 3) {
+    const i0 = soup.indices[i];
+    const i1 = soup.indices[i + 1];
+    const i2 = soup.indices[i + 2];
+    // All 3 vertices of a roof triangle must have surfacetype == 2.
+    if (
+      soup.surfaceTypes[i0] !== SURFACE_TYPE_ROOF ||
+      soup.surfaceTypes[i1] !== SURFACE_TYPE_ROOF ||
+      soup.surfaceTypes[i2] !== SURFACE_TYPE_ROOF
+    )
+      continue;
+    positions.push(
+      soup.positions[i0 * 3], soup.positions[i0 * 3 + 1], soup.positions[i0 * 3 + 2],
+      soup.positions[i1 * 3], soup.positions[i1 * 3 + 1], soup.positions[i1 * 3 + 2],
+      soup.positions[i2 * 3], soup.positions[i2 * 3 + 1], soup.positions[i2 * 3 + 2],
+    );
+  }
+  return new Float32Array(positions);
+}
+
+/** Compute the face normal of a triangle (9 consecutive floats). */
+function triangleNormal(
+  roof: Float32Array,
+  base: number,
+): [number, number, number] {
+  const e1x = roof[base + 3] - roof[base];
+  const e1y = roof[base + 4] - roof[base + 1];
+  const e1z = roof[base + 5] - roof[base + 2];
+  const e2x = roof[base + 6] - roof[base];
+  const e2y = roof[base + 7] - roof[base + 1];
+  const e2z = roof[base + 8] - roof[base + 2];
+  let nx = e1y * e2z - e1z * e2y;
+  let ny = e1z * e2x - e1x * e2z;
+  let nz = e1x * e2y - e1y * e2x;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  nx /= len;
+  ny /= len;
+  nz /= len;
+  // Ensure normal points upward (z > 0).
+  if (nz < 0) {
+    nx = -nx;
+    ny = -ny;
+    nz = -nz;
+  }
+  return [nx, ny, nz];
+}
+
+type RoofHit = {
+  z: number;
+  normal: [number, number, number];
+};
+
+/**
+ * Find the roof triangle containing (x, y) via 2D barycentric test.
+ * Returns interpolated Z and the triangle's face normal.
+ * Falls back to nearest vertex / nearest centroid if no triangle contains
+ * the point (edge cases from imprecise detection coords).
+ */
+function findRoofSurfaceAt(
+  x: number,
+  y: number,
+  roof: Float32Array,
+): RoofHit | null {
+  const triCount = roof.length / 9;
+  if (triCount === 0) return null;
+
+  // Pass 1: exact barycentric hit
+  for (let t = 0; t < triCount; t++) {
+    const b = t * 9;
+    const ax = roof[b], ay = roof[b + 1], az = roof[b + 2];
+    const bx = roof[b + 3], by = roof[b + 4], bz = roof[b + 5];
+    const cx = roof[b + 6], cy = roof[b + 7], cz = roof[b + 8];
+
+    const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(denom) < 1e-10) continue;
+
+    const u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denom;
+    const v = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denom;
+    const w = 1 - u - v;
+
+    if (u >= -0.05 && v >= -0.05 && w >= -0.05) {
+      return {
+        z: u * az + v * bz + w * cz,
+        normal: triangleNormal(roof, b),
+      };
+    }
+  }
+
+  // Pass 2: fallback — nearest centroid
+  let bestDist = Infinity;
+  let bestZ = 0;
+  let bestNormal: [number, number, number] = [0, 0, 1];
+  for (let t = 0; t < triCount; t++) {
+    const b = t * 9;
+    const centX = (roof[b] + roof[b + 3] + roof[b + 6]) / 3;
+    const centY = (roof[b + 1] + roof[b + 4] + roof[b + 7]) / 3;
+    const centZ = (roof[b + 2] + roof[b + 5] + roof[b + 8]) / 3;
+    const dist = (centX - x) ** 2 + (centY - y) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestZ = centZ;
+      bestNormal = triangleNormal(roof, b);
+    }
+  }
+  return { z: bestZ, normal: bestNormal };
+}
+
+/**
+ * Build a local coordinate frame on the roof surface:
+ *   - normal: the triangle's face normal (pointing up)
+ *   - slopeDown: gravity projected onto the roof plane (down-slope direction)
+ *   - right: cross(normal, slopeDown)
+ *
+ * Ported from argile-web-ui calculateRoofCoordinateSystem.
+ */
+function roofFrame(n: [number, number, number]): {
+  right: [number, number, number];
+  slopeDown: [number, number, number];
+} {
+  // Gravity in the local frame = -Z (CityJSON is Z-up after our transform).
+  // Project gravity onto the roof plane to get the slope-down direction.
+  const dot = -n[2]; // gravity · normal = (0,0,-1) · n = -n[2]
+  let sdx = 0 - n[0] * dot;
+  let sdy = 0 - n[1] * dot;
+  let sdz = -1 - n[2] * dot;
+  let sdLen = Math.hypot(sdx, sdy, sdz);
+
+  // Flat roof: fallback to Y projected onto the roof plane.
+  if (sdLen < 1e-6) {
+    const d = n[1]; // (0,1,0) · n
+    sdx = -n[0] * d;
+    sdy = 1 - n[1] * d;
+    sdz = -n[2] * d;
+    sdLen = Math.hypot(sdx, sdy, sdz) || 1;
+  }
+  sdx /= sdLen;
+  sdy /= sdLen;
+  sdz /= sdLen;
+
+  // right = normal × slopeDown
+  const rx = n[1] * sdz - n[2] * sdy;
+  const ry = n[2] * sdx - n[0] * sdz;
+  const rz = n[0] * sdy - n[1] * sdx;
+  const rLen = Math.hypot(rx, ry, rz) || 1;
+
+  return {
+    right: [rx / rLen, ry / rLen, rz / rLen],
+    slopeDown: [sdx, sdy, sdz],
+  };
+}
+
+// -- Quad builder using the roof coordinate frame --
+
+function buildRoofQuad(
+  center: [number, number, number],
+  normal: [number, number, number],
+  halfW: number,
+  halfH: number,
+): { positions: number[]; normals: number[]; indices: number[] } {
+  const { right: r, slopeDown: sd } = roofFrame(normal);
+
+  // Offset slightly above the roof surface along the normal.
+  const cx = center[0] + normal[0] * SURFACE_OFFSET;
+  const cy = center[1] + normal[1] * SURFACE_OFFSET;
+  const cz = center[2] + normal[2] * SURFACE_OFFSET;
+
+  // 4 corners: ±halfW along right, ±halfH along slopeDown
+  const positions: number[] = [];
+  for (const [sw, sh] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    positions.push(
+      cx + r[0] * halfW * sw + sd[0] * halfH * sh,
+      cy + r[1] * halfW * sw + sd[1] * halfH * sh,
+      cz + r[2] * halfW * sw + sd[2] * halfH * sh,
+    );
+  }
+  const normals = [
+    normal[0], normal[1], normal[2],
+    normal[0], normal[1], normal[2],
+    normal[0], normal[1], normal[2],
+    normal[0], normal[1], normal[2],
+  ];
+  const indices = [0, 1, 2, 0, 2, 3];
+  return { positions, normals, indices };
+}
+
+// -- Matching + merging --
+
 type MatchedDetection = {
   detection: Detection;
   building: ParsedBuilding;
 };
 
-/**
- * Match each detection to the closest parsed building by centroid distance.
- * Detection building_id ≠ geopf_id (different datasets), so we use geo
- * proximity instead of key equality.
- */
 function matchDetections(
   detections: Detection[],
   buildings: ParsedBuilding[],
@@ -55,7 +243,7 @@ function matchDetections(
   const matched: MatchedDetection[] = [];
   for (const det of detections) {
     let best: ParsedBuilding | null = null;
-    let bestDist = Number.POSITIVE_INFINITY;
+    let bestDist = Infinity;
     for (const b of buildings) {
       const dLat = det.center_lat - b.lat;
       const dLng = det.center_lon - b.lng;
@@ -65,7 +253,6 @@ function matchDetections(
         best = b;
       }
     }
-    // Only match if the building is within ~50 m (≈0.0005°)
     if (best && bestDist < 0.0005 * 0.0005) {
       matched.push({ detection: det, building: best });
     }
@@ -73,66 +260,6 @@ function matchDetections(
   return matched;
 }
 
-/**
- * Build a single quad (2 triangles, 4 vertices) oriented to the roof
- * surface at `center` with normal `normal`, offset slightly above the roof.
- * Returns positions (12 floats), normals (12 floats), indices (6 ints).
- */
-function buildQuad(
-  center: [number, number, number],
-  normal: [number, number, number],
-  halfW: number,
-  halfH: number,
-  stackOffset: number,
-): { positions: number[]; normals: number[]; indices: number[] } {
-  // Build a local coordinate frame on the roof: `up` = normal,
-  // `right` and `forward` lie on the surface.
-  const [nx, ny, nz] = normal;
-  // Pick an arbitrary vector NOT parallel to the normal to derive `right`.
-  const ax = Math.abs(nx) < 0.9 ? 1 : 0;
-  const ay = Math.abs(nx) < 0.9 ? 0 : 1;
-  // right = normalize(arbitrary × normal)
-  let rx = ay * nz - 0 * ny;
-  let ry = 0 * nx - ax * nz;
-  let rz = ax * ny - ay * nx;
-  const rLen = Math.hypot(rx, ry, rz) || 1;
-  rx /= rLen;
-  ry /= rLen;
-  rz /= rLen;
-  // forward = normal × right
-  const fx = ny * rz - nz * ry;
-  const fy = nz * rx - nx * rz;
-  const fz = nx * ry - ny * rx;
-
-  // Offset above the roof surface to avoid z-fighting
-  const off = 0.05 + stackOffset * 0.08;
-  const cx = center[0] + nx * off;
-  const cy = center[1] + ny * off;
-  const cz = center[2] + nz * off;
-
-  // 4 corners: ±halfW along right, ±halfH along forward
-  const positions: number[] = [];
-  for (const [sw, sh] of [
-    [-1, -1],
-    [1, -1],
-    [1, 1],
-    [-1, 1],
-  ]) {
-    positions.push(
-      cx + rx * halfW * sw + fx * halfH * sh,
-      cy + ry * halfW * sw + fy * halfH * sh,
-      cz + rz * halfW * sw + fz * halfH * sh,
-    );
-  }
-  const normals = [nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz];
-  const indices = [0, 1, 2, 0, 2, 3];
-  return { positions, normals, indices };
-}
-
-/**
- * Build a merged mesh of detection panels for all matched detections,
- * baked into the same meter-offset frame as the buildings.
- */
 function buildDetectionMesh(
   matched: MatchedDetection[],
   origin: { lat: number; lng: number },
@@ -142,75 +269,83 @@ function buildDetectionMesh(
   const mPerDegLat = (Math.PI * R) / 180;
   const mPerDegLng = mPerDegLat * Math.cos(latRad);
 
-  // Group by building to stack panels
-  const byBuilding = new Map<string, MatchedDetection[]>();
-  for (const m of matched) {
-    const bucket = byBuilding.get(m.building.geopf_id);
-    if (bucket) bucket.push(m);
-    else byBuilding.set(m.building.geopf_id, [m]);
-  }
-
   const allPos: number[] = [];
   const allNrm: number[] = [];
   const allIdx: number[] = [];
   let vOffset = 0;
 
-  for (const bucket of byBuilding.values()) {
-    const b = bucket[0].building;
-    if (!b.roofCentroid || !b.roofNormal) continue;
+  // Cache roof positions per building.
+  const roofCache = new Map<string, Float32Array>();
 
+  for (const m of matched) {
+    const b = m.building;
+    const det = m.detection;
+
+    // Get the detection's WGS84 center. Prefer geo bbox if available.
+    let detLng: number;
+    let detLat: number;
+    if (det.geo_xmin != null && det.geo_xmax != null && det.geo_ymin != null && det.geo_ymax != null) {
+      detLng = (det.geo_xmin + det.geo_xmax) / 2;
+      detLat = (det.geo_ymin + det.geo_ymax) / 2;
+    } else {
+      // Fallback: building centroid (clustered but visible).
+      detLng = det.center_lon;
+      detLat = det.center_lat;
+    }
+
+    // Convert the detection's WGS84 position to the building's local frame
+    // (east/north meters from the building's centroid).
+    const localX = (detLng - b.lng) * mPerDegLng;
+    const localY = (detLat - b.lat) * mPerDegLat;
+
+    // Get or compute roof triangles for this building.
+    let roof = roofCache.get(b.geopf_id);
+    if (roof === undefined) {
+      roof = extractRoofPositions(b);
+      roofCache.set(b.geopf_id, roof);
+    }
+
+    // Find the roof triangle at this XY and get its Z + normal.
+    const hit = findRoofSurfaceAt(localX, localY, roof);
+    if (!hit) continue;
+
+    // Detection size from geo bbox (meters), or fixed default.
+    let halfW = 0.5;
+    let halfH = 0.4;
+    if (det.geo_xmin != null && det.geo_xmax != null && det.geo_ymin != null && det.geo_ymax != null) {
+      halfW = Math.max(0.2, ((det.geo_xmax - det.geo_xmin) * mPerDegLng) / 2);
+      halfH = Math.max(0.2, ((det.geo_ymax - det.geo_ymin) * mPerDegLat) / 2);
+    }
+
+    // Build the quad in the building's local frame, then offset to the
+    // merged frame (building lng/lat → origin lng/lat).
     const east = (b.lng - origin.lng) * mPerDegLng;
     const north = (b.lat - origin.lat) * mPerDegLat;
 
-    // Roof centroid in the merged frame
-    const rc: [number, number, number] = [
-      b.roofCentroid[0] + east,
-      b.roofCentroid[1] + north,
-      b.roofCentroid[2],
+    const center: [number, number, number] = [
+      localX + east,
+      localY + north,
+      hit.z,
     ];
 
-    // Sort by score descending so best-confidence panels are closest to roof
-    bucket.sort((a, b) => b.detection.score - a.detection.score);
-
-    for (let i = 0; i < bucket.length; i++) {
-      const det = bucket[i].detection;
-      const hw = det.label === "photovoltaic solar panel" ? PANEL_HALF_W * 1.5 : PANEL_HALF_W;
-      const hh = det.label === "chimney" ? PANEL_HALF_H * 0.7 : PANEL_HALF_H;
-
-      // Offset each panel slightly along the roof tangent plane so they
-      // don't overlap. Spiral outward from the centroid.
-      const angle = (i * 2.4); // golden angle spacing
-      const radius = i * 0.3;
-      const offset: [number, number, number] = [
-        rc[0] + Math.cos(angle) * radius,
-        rc[1] + Math.sin(angle) * radius,
-        rc[2],
-      ];
-
-      const quad = buildQuad(offset, b.roofNormal, hw, hh, i);
-      for (const p of quad.positions) allPos.push(p);
-      for (const n of quad.normals) allNrm.push(n);
-      for (const idx of quad.indices) allIdx.push(idx + vOffset);
-      vOffset += 4; // 4 vertices per quad
-    }
+    const quad = buildRoofQuad(center, hit.normal, halfW, halfH);
+    for (const p of quad.positions) allPos.push(p);
+    for (const n of quad.normals) allNrm.push(n);
+    for (const idx of quad.indices) allIdx.push(idx + vOffset);
+    vOffset += 4;
   }
 
   return {
     positions: new Float32Array(allPos),
     normals: new Float32Array(allNrm),
     indices: new Uint32Array(allIdx),
-    surfaceTypes: new Int32Array(0), // unused for detections
+    surfaceTypes: new Int32Array(0),
   };
 }
 
 type InstanceDatum = { position: [number, number, number] };
-
 const LABEL_GROUPS = ["roof window", "photovoltaic solar panel", "chimney"] as const;
 
-/**
- * Create one SimpleMeshLayer per detection label (different colors). Returns
- * an array so the caller can spread them into the deck.gl layer list.
- */
 export function createDetectionLayer(
   detections: Detection[],
   buildings: ParsedBuilding[],
