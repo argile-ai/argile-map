@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { AddressSearch } from "./AddressSearch";
 import { createBuildingLayer, toDeckMesh } from "./BuildingLayer";
+import { Compass } from "./Compass";
 import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
@@ -147,6 +148,7 @@ export function App() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [camera, setCamera] = useState<{ lat: number; lng: number } | null>(null);
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
+  const [bearing, setBearing] = useState<number>(INITIAL_VIEW.bearing);
 
   // Only feed bounds to the data layer once we're zoomed in enough AND
   // the map has settled. Below the threshold we show nothing rather than
@@ -178,10 +180,16 @@ export function App() {
     });
     setCamera({ lat: c.lat, lng: c.lng });
     setZoom(map.getZoom());
+    setBearing(map.getBearing());
   }, []);
 
   const onAddressSelect = useCallback((lat: number, lng: number) => {
     mapRef.current?.flyTo({ center: [lng, lat], zoom: 17, pitch: 60, duration: 1500 });
+  }, []);
+
+  const onCompassBearing = useCallback((b: number) => {
+    mapRef.current?.rotateTo(b, { duration: 300 });
+    setBearing(b);
   }, []);
 
   // Hide the basemap's shoe-box fill-extrusion building layer when we have
@@ -250,6 +258,7 @@ export function App() {
         <DeckGLOverlay layers={layers} />
       </MapGL>
       <AddressSearch onSelect={onAddressSelect} />
+      <Compass bearing={bearing} onBearingChange={onCompassBearing} />
       <div
         style={{
           position: "absolute",
