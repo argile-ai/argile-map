@@ -1,0 +1,18 @@
+services:
+  argile-map:
+    build: .
+    restart: unless-stopped
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_network"
+      - "traefik.http.routers.argile-map.rule=Host(`map.argile.ai`)"
+      - "traefik.http.routers.argile-map.entrypoints=websecure"
+      - "traefik.http.routers.argile-map.tls=true"
+      - "traefik.http.routers.argile-map.tls.certresolver=leresolver"
+      - "traefik.http.services.argile-map.loadbalancer.server.port=80"
+
+networks:
+  traefik_network:
+    external: true

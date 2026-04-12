@@ -1,0 +1,41 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-map
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -euxo pipefail
+            cd /home/ubuntu/src
+
+            # Clone or update the repo
+            if [ -d argile-map ]; then
+              cd argile-map
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              git clone git@github.com:argile-ai/argile-map.git
+              cd argile-map
+            fi
+
+            # Build + (re)start the container
+            docker compose build
+            docker compose up -d
+
+            echo "=== Deployed to map.argile.ai ==="
