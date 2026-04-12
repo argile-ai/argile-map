@@ -189,12 +189,21 @@ export function App() {
       const style = map.getStyle();
       if (!style?.layers) return;
       for (const layer of style.layers) {
+        // Hide shoe-box fill-extrusions when we have real CityJSON meshes.
         if (layer.type === "fill-extrusion" && /building/i.test(layer.id)) {
           map.setLayoutProperty(
             layer.id,
             "visibility",
             hasCityJsonBuildings ? "none" : "visible",
           );
+        }
+        // Hide POI / building name labels (e.g. "Hôtel de Ville") but keep
+        // street names (road_*), place names (place_*), and house numbers.
+        if (
+          layer.type === "symbol" &&
+          /^(poi|building)/i.test(layer.id)
+        ) {
+          map.setLayoutProperty(layer.id, "visibility", "none");
         }
       }
     };
