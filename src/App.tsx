@@ -281,22 +281,22 @@ export function App() {
         </div>
         {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
           <div style={{ opacity: 0.75 }}>
-            Zoom in to load 3D buildings (z≥{MIN_ZOOM_FOR_BUILDINGS})
+            Zoomez pour charger les bâtiments 3D (z≥{MIN_ZOOM_FOR_BUILDINGS})
           </div>
         ) : (
           <>
             <div>
-              {parsed.length} / {buildings.length} buildings rendered
+              {parsed.length} / {buildings.length} bâtiments affichés
             </div>
-            <div>{detections.length} detections in view</div>
+            <div>{detections.length} détections en vue</div>
             <div style={{ opacity: 0.75, marginTop: 2 }}>
               {status.status === "loading"
-                ? "Loading viewport…"
+                ? "Chargement…"
                 : status.status === "ready"
-                  ? "Loaded"
+                  ? "Chargé"
                   : status.status === "error"
-                    ? "Failed"
-                    : "Idle"}
+                    ? "Erreur"
+                    : ""}
             </div>
           </>
         )}

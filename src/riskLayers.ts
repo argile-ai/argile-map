@@ -30,7 +30,7 @@ export const RISK_LAYERS: RiskLayerDef[] = [
     label: "Aléa argile (RGA)",
     wmsLayer: "ALEARG",
     category: "argile",
-    color: "#d97706",
+    color: "#fda300", // matches WMS orange (medium risk)
     defaultVisible: false,
   },
   {
@@ -54,7 +54,7 @@ export const RISK_LAYERS: RiskLayerDef[] = [
     label: "Communes à risque (GASPAR)",
     wmsLayer: "PPRN_COMMUNE_GASPAR",
     category: "gaspar",
-    color: "#7c3aed",
+    color: "#c8a050", // matches WMS brown/tan
     defaultVisible: false,
   },
 ];
