@@ -10,6 +10,7 @@ import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
 import { mergeBuildings } from "./mergeBuildings";
+import { RiskLayerPanel } from "./RiskLayerPanel";
 import type { CityJsonBuilding } from "./types";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
@@ -259,10 +260,11 @@ export function App() {
       </MapGL>
       <AddressSearch onSelect={onAddressSelect} />
       <Compass bearing={bearing} onBearingChange={onCompassBearing} />
+      <RiskLayerPanel mapRef={mapRef} />
       <div
         style={{
           position: "absolute",
-          top: 12,
+          bottom: 32,
           left: 12,
           padding: "8px 12px",
           background: "rgba(20,20,30,0.85)",
