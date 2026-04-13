@@ -42,25 +42,12 @@ function removeWmsLayer(map: maplibregl.Map, id: string): void {
 
 export function RiskLayerPanel({ mapRef }: Props) {
   const [open, setOpen] = useState(false);
-  const [visible, setVisible] = useState<Set<string>>(() => {
-    const s = new Set<string>();
-    for (const l of RISK_LAYERS) if (l.defaultVisible) s.add(l.id);
-    return s;
-  });
-  // Track which layers we've added to the map so cleanup works on unmount.
+  const [activeId, setActiveId] = useState<string | null>(null);
   const addedRef = useRef(new Set<string>());
 
-  const toggle = useCallback(
-    (id: string) => {
-      setVisible((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-    },
-    [],
-  );
+  const toggle = useCallback((id: string) => {
+    setActiveId((prev) => (prev === id ? null : id));
+  }, []);
 
   // Sync MapLibre layers with the visible set.
   useEffect(() => {
@@ -68,7 +55,7 @@ export function RiskLayerPanel({ mapRef }: Props) {
     if (!map || !map.isStyleLoaded()) return;
 
     for (const def of RISK_LAYERS) {
-      if (visible.has(def.id)) {
+      if (def.id === activeId) {
         ensureWmsLayer(map, def);
         addedRef.current.add(def.id);
       } else {
@@ -76,7 +63,7 @@ export function RiskLayerPanel({ mapRef }: Props) {
         addedRef.current.delete(def.id);
       }
     }
-  }, [visible, mapRef]);
+  }, [activeId, mapRef]);
 
   // Cleanup on unmount.
   useEffect(() => {
@@ -105,8 +92,9 @@ export function RiskLayerPanel({ mapRef }: Props) {
                 {layers.map((l) => (
                   <label key={l.id} style={styles.row}>
                     <input
-                      type="checkbox"
-                      checked={visible.has(l.id)}
+                      type="radio"
+                      name="risk-layer"
+                      checked={activeId === l.id}
                       onChange={() => toggle(l.id)}
                       style={{ marginRight: 6 }}
                     />
