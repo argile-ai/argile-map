@@ -25,7 +25,6 @@ export type RiskLayerDef = {
 };
 
 export const RISK_LAYERS: RiskLayerDef[] = [
-  // -- Retrait-gonflement des argiles --
   {
     id: "rga-alea",
     label: "Aléa argile (RGA)",
@@ -35,70 +34,24 @@ export const RISK_LAYERS: RiskLayerDef[] = [
     defaultVisible: false,
   },
   {
-    id: "rga-sinistralite",
-    label: "Sinistralité argile",
-    wmsLayer: "ALEARG_REALISE",
-    category: "argile",
-    color: "#b45309",
-    defaultVisible: false,
-  },
-  {
-    id: "pprn-argile",
-    label: "PPRn argile (approuvé)",
-    wmsLayer: "PPRN_COMMUNE_ARGILE_APPROUV",
-    category: "argile",
-    color: "#92400e",
-    defaultVisible: false,
-  },
-
-  // -- Feux de forêt --
-  {
-    id: "pprn-feu-approuve",
-    label: "PPRn feu de forêt (approuvé)",
-    wmsLayer: "PPRN_COMMUNE_FEU_APPROUV",
-    category: "feu",
-    color: "#dc2626",
-    defaultVisible: false,
-  },
-  {
     id: "pprn-feu-zone",
-    label: "Zones PPRn feu",
+    label: "Zones feux de forêt",
     wmsLayer: "PPRN_ZONE_FEU",
     category: "feu",
     color: "#ef4444",
     defaultVisible: false,
   },
   {
-    id: "sup-feu",
-    label: "Servitudes feu de forêt",
-    wmsLayer: "SUP_FEU",
-    category: "feu",
-    color: "#f87171",
-    defaultVisible: false,
-  },
-
-  // -- Inondation --
-  {
-    id: "pprn-inond-approuve",
-    label: "PPRn inondation (approuvé)",
-    wmsLayer: "PPRN_COMMUNE_RISQINOND_APPROUV",
-    category: "inondation",
-    color: "#2563eb",
-    defaultVisible: false,
-  },
-  {
     id: "pprn-inond-zone",
-    label: "Zones PPRn inondation",
+    label: "Zones inondation",
     wmsLayer: "PPRN_ZONE_INOND",
     category: "inondation",
     color: "#3b82f6",
     defaultVisible: false,
   },
-
-  // -- GASPAR (transversal) --
   {
     id: "gaspar-pprn",
-    label: "Communes GASPAR (PPRn)",
+    label: "Communes à risque (GASPAR)",
     wmsLayer: "PPRN_COMMUNE_GASPAR",
     category: "gaspar",
     color: "#7c3aed",

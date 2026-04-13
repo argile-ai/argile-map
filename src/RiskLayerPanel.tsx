@@ -12,12 +12,6 @@ type Props = {
   mapRef: React.RefObject<MapRef | null>;
 };
 
-const CATEGORIES: { key: RiskLayerDef["category"]; label: string }[] = [
-  { key: "argile", label: "Retrait-gonflement argiles" },
-  { key: "feu", label: "Feux de forêt" },
-  { key: "inondation", label: "Inondation" },
-  { key: "gaspar", label: "GASPAR" },
-];
 
 function ensureWmsLayer(map: maplibregl.Map, def: RiskLayerDef): void {
   if (map.getSource(def.id)) return;
@@ -83,33 +77,19 @@ export function RiskLayerPanel({ mapRef }: Props) {
       </button>
       {open && (
         <div style={styles.panel}>
-          {CATEGORIES.map((cat) => {
-            const layers = RISK_LAYERS.filter((l) => l.category === cat.key);
-            if (layers.length === 0) return null;
-            return (
-              <div key={cat.key} style={{ marginBottom: 8 }}>
-                <div style={styles.catLabel}>{cat.label}</div>
-                {layers.map((l) => (
-                  <label key={l.id} style={styles.row}>
-                    <input
-                      type="radio"
-                      name="risk-layer"
-                      checked={activeId === l.id}
-                      onChange={() => toggle(l.id)}
-                      style={{ marginRight: 6 }}
-                    />
-                    <span
-                      style={{
-                        ...styles.swatch,
-                        background: l.color,
-                      }}
-                    />
-                    <span style={{ fontSize: 12 }}>{l.label}</span>
-                  </label>
-                ))}
-              </div>
-            );
-          })}
+          {RISK_LAYERS.map((l) => (
+            <label key={l.id} style={styles.row}>
+              <input
+                type="radio"
+                name="risk-layer"
+                checked={activeId === l.id}
+                onChange={() => toggle(l.id)}
+                style={{ marginRight: 6 }}
+              />
+              <span style={{ ...styles.swatch, background: l.color }} />
+              <span style={{ fontSize: 12 }}>{l.label}</span>
+            </label>
+          ))}
         </div>
       )}
     </div>
