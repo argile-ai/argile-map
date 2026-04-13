@@ -346,8 +346,14 @@ function buildDetectionMesh(
     // Track used faces so multiple detections on the same building don't
     // stack on the same triangle.
     const usedFaces = new Set<number>();
+    // Limit chimneys to 2 per building (highest confidence first, already
+    // sorted). Most buildings have only 1-2 physical chimneys; the SAT
+    // model tends to over-detect them.
+    const MAX_CHIMNEYS_PER_BUILDING = 2;
+    let chimneyCount = 0;
 
     for (const det of dets) {
+      if (det.label === "chimney" && chimneyCount >= MAX_CHIMNEYS_PER_BUILDING) continue;
       // Find the nearest UNUSED roof face centroid.
       let bestIdx = -1;
       let bestDist = Infinity;
@@ -391,6 +397,8 @@ function buildDetectionMesh(
         mesh = buildRoofQuad(center, face.normal, 0.35, 0.25);
         vertCount = 4;
       }
+
+      if (det.label === "chimney") chimneyCount++;
 
       for (const p of mesh.positions) allPos.push(p);
       for (const n of mesh.normals) allNrm.push(n);
