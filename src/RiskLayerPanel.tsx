@@ -1,21 +1,19 @@
 /**
  * Toggleable panel for Géorisques WMS risk overlay layers.
- * Each checkbox adds/removes a raster WMS source + layer from the
- * MapLibre map instance.
+ * Radio buttons select one layer at a time. When active, the official
+ * WMS legend image is displayed below the list.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MapRef } from "react-map-gl/maplibre";
-import { RISK_LAYERS, wmsUrl, type RiskLayerDef } from "./riskLayers";
+import { RISK_LAYERS, legendUrl, wmsUrl, type RiskLayerDef } from "./riskLayers";
 
 type Props = {
   mapRef: React.RefObject<MapRef | null>;
 };
 
-
 function ensureWmsLayer(map: maplibregl.Map, def: RiskLayerDef): void {
   if (map.getSource(def.id)) return;
-
   map.addSource(def.id, {
     type: "raster",
     tiles: [wmsUrl(def.wmsLayer)],
@@ -43,11 +41,9 @@ export function RiskLayerPanel({ mapRef }: Props) {
     setActiveId((prev) => (prev === id ? null : id));
   }, []);
 
-  // Sync MapLibre layers with the visible set.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !map.isStyleLoaded()) return;
-
     for (const def of RISK_LAYERS) {
       if (def.id === activeId) {
         ensureWmsLayer(map, def);
@@ -59,7 +55,6 @@ export function RiskLayerPanel({ mapRef }: Props) {
     }
   }, [activeId, mapRef]);
 
-  // Cleanup on unmount.
   useEffect(() => {
     return () => {
       const map = mapRef.current?.getMap();
@@ -67,6 +62,8 @@ export function RiskLayerPanel({ mapRef }: Props) {
       for (const id of addedRef.current) removeWmsLayer(map, id);
     };
   }, [mapRef]);
+
+  const activeDef = RISK_LAYERS.find((l) => l.id === activeId);
 
   return (
     <div style={styles.wrapper}>
@@ -84,12 +81,21 @@ export function RiskLayerPanel({ mapRef }: Props) {
                 name="risk-layer"
                 checked={activeId === l.id}
                 onChange={() => toggle(l.id)}
-                style={{ marginRight: 6 }}
+                style={{ marginRight: 8 }}
               />
-              <span style={{ ...styles.swatch, background: l.color }} />
               <span style={{ fontSize: 12 }}>{l.label}</span>
             </label>
           ))}
+          {activeDef && (
+            <div style={styles.legend}>
+              <div style={styles.legendTitle}>Légende — {activeDef.label}</div>
+              <img
+                src={legendUrl(activeDef.wmsLayer)}
+                alt={`Légende ${activeDef.label}`}
+                style={styles.legendImg}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -103,7 +109,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 12,
     zIndex: 10,
     fontFamily: "'Lexend', system-ui, sans-serif",
-    maxWidth: 260,
+    maxWidth: 280,
   },
   toggle: {
     display: "flex",
@@ -124,29 +130,32 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(20,20,30,0.90)",
     color: "white",
     borderRadius: 10,
-    maxHeight: 340,
+    maxHeight: 420,
     overflowY: "auto",
-  },
-  catLabel: {
-    fontSize: 11,
-    fontWeight: 600,
-    opacity: 0.6,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.04em",
-    marginBottom: 4,
   },
   row: {
     display: "flex",
     alignItems: "center",
     cursor: "pointer",
-    padding: "3px 0",
+    padding: "4px 0",
   },
-  swatch: {
-    display: "inline-block",
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    marginRight: 6,
-    flexShrink: 0,
+  legend: {
+    marginTop: 8,
+    borderTop: "1px solid rgba(255,255,255,0.15)",
+    paddingTop: 8,
+  },
+  legendTitle: {
+    fontSize: 10,
+    fontWeight: 600,
+    opacity: 0.6,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.04em",
+    marginBottom: 6,
+  },
+  legendImg: {
+    maxWidth: "100%",
+    borderRadius: 4,
+    background: "rgba(255,255,255,0.9)",
+    padding: 4,
   },
 };

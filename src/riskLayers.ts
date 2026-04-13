@@ -16,10 +16,6 @@ export type RiskLayerDef = {
   label: string;
   /** WMS LAYERS parameter value. */
   wmsLayer: string;
-  /** Category for grouping in the UI. */
-  category: "argile" | "feu" | "inondation" | "gaspar";
-  /** Legend swatch color (CSS). */
-  color: string;
   /** Default visibility. */
   defaultVisible: boolean;
 };
@@ -29,37 +25,35 @@ export const RISK_LAYERS: RiskLayerDef[] = [
     id: "rga-alea",
     label: "Aléa argile (RGA)",
     wmsLayer: "ALEARG",
-    category: "argile",
-    color: "#fda300", // matches WMS orange (medium risk)
+    defaultVisible: false,
+  },
+  {
+    id: "radon",
+    label: "Potentiel radon",
+    wmsLayer: "RADON",
     defaultVisible: false,
   },
   {
     id: "pprn-feu-zone",
     label: "Zones feux de forêt",
     wmsLayer: "PPRN_ZONE_FEU",
-    category: "feu",
-    color: "#ef4444",
     defaultVisible: false,
   },
   {
     id: "pprn-inond-zone",
     label: "Zones inondation",
     wmsLayer: "PPRN_ZONE_INOND",
-    category: "inondation",
-    color: "#3b82f6",
     defaultVisible: false,
   },
   {
     id: "gaspar-pprn",
     label: "Communes à risque (GASPAR)",
     wmsLayer: "PPRN_COMMUNE_GASPAR",
-    category: "gaspar",
-    color: "#c8a050", // matches WMS brown/tan
     defaultVisible: false,
   },
 ];
 
-const WMS_BASE = "https://www.georisques.gouv.fr/services";
+export const WMS_BASE = "https://www.georisques.gouv.fr/services";
 
 /**
  * Build the WMS tile URL template for MapLibre's raster source.
@@ -74,5 +68,13 @@ export function wmsUrl(wmsLayer: string): string {
     `&WIDTH=256&HEIGHT=256` +
     `&FORMAT=image/png` +
     `&TRANSPARENT=true`
+  );
+}
+
+/** WMS GetLegendGraphic URL for a given layer. */
+export function legendUrl(wmsLayer: string): string {
+  return (
+    `${WMS_BASE}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetLegendGraphic` +
+    `&LAYER=${wmsLayer}&FORMAT=image/png&SLD_VERSION=1.1.0`
   );
 }
