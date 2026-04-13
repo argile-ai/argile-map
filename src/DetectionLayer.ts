@@ -20,15 +20,15 @@ import type { Detection } from "./types";
 
 const SURFACE_OFFSET = 0.05; // meters above roof surface
 
-/** Colors per label (RGBA 0-255). */
+/** Realistic colors per label (RGBA 0-255). */
 function colorForLabel(label: string): [number, number, number, number] {
   switch (label) {
     case "roof window":
-      return [80, 160, 255, 230];
+      return [140, 200, 240, 200]; // glass blue, slightly transparent
     case "photovoltaic solar panel":
-      return [255, 170, 30, 230];
+      return [25, 35, 70, 245]; // dark blue-black like real PV cells
     case "chimney":
-      return [180, 180, 180, 230];
+      return [170, 95, 55, 245]; // terracotta / brick
     default:
       return [200, 200, 200, 200];
   }
@@ -137,20 +137,20 @@ function roofFrame(n: [number, number, number]): {
 
 // -- Quad builder using the roof coordinate frame --
 
+type MeshData = { positions: number[]; normals: number[]; indices: number[] };
+
+/** Flat panel on the roof surface (PV panels, roof windows). */
 function buildRoofQuad(
   center: [number, number, number],
   normal: [number, number, number],
   halfW: number,
   halfH: number,
-): { positions: number[]; normals: number[]; indices: number[] } {
+): MeshData {
   const { right: r, slopeDown: sd } = roofFrame(normal);
-
-  // Offset slightly above the roof surface along the normal.
   const cx = center[0] + normal[0] * SURFACE_OFFSET;
   const cy = center[1] + normal[1] * SURFACE_OFFSET;
   const cz = center[2] + normal[2] * SURFACE_OFFSET;
 
-  // 4 corners: ±halfW along right, ±halfH along slopeDown
   const positions: number[] = [];
   for (const [sw, sh] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     positions.push(
@@ -159,14 +159,87 @@ function buildRoofQuad(
       cz + r[2] * halfW * sw + sd[2] * halfH * sh,
     );
   }
-  const normals = [
-    normal[0], normal[1], normal[2],
-    normal[0], normal[1], normal[2],
-    normal[0], normal[1], normal[2],
-    normal[0], normal[1], normal[2],
+  return {
+    positions,
+    normals: [
+      normal[0], normal[1], normal[2],
+      normal[0], normal[1], normal[2],
+      normal[0], normal[1], normal[2],
+      normal[0], normal[1], normal[2],
+    ],
+    indices: [0, 1, 2, 0, 2, 3],
+  };
+}
+
+/**
+ * Small 3D box rising from the roof surface (chimneys).
+ * 8 vertices, 6 faces (12 triangles).
+ */
+function buildChimneyBox(
+  center: [number, number, number],
+  normal: [number, number, number],
+  halfW: number,
+  halfH: number,
+  height: number,
+): MeshData {
+  // Chimney rises vertically (Z-up), not along the roof normal.
+  // Base sits on the roof, top goes straight up.
+  const bx = center[0];
+  const by = center[1];
+  const bz = center[2] + SURFACE_OFFSET;
+
+  // 4 bottom corners, 4 top corners (axis-aligned box).
+  const positions = [
+    // bottom face (z = bz)
+    bx - halfW, by - halfH, bz,
+    bx + halfW, by - halfH, bz,
+    bx + halfW, by + halfH, bz,
+    bx - halfW, by + halfH, bz,
+    // top face (z = bz + height)
+    bx - halfW, by - halfH, bz + height,
+    bx + halfW, by - halfH, bz + height,
+    bx + halfW, by + halfH, bz + height,
+    bx - halfW, by + halfH, bz + height,
   ];
-  const indices = [0, 1, 2, 0, 2, 3];
-  return { positions, normals, indices };
+
+  // Face normals (6 faces).
+  const normals = [
+    // bottom (unused visually but needed for the buffer)
+    0, 0, -1,  0, 0, -1,  0, 0, -1,  0, 0, -1,
+    // top
+    0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
+  ];
+
+  // Use the 8 vertices with per-face indexing. Since SimpleMeshLayer
+  // doesn't do per-face normals well, approximate with vertex normals
+  // pointing outward. Good enough for tiny chimney boxes.
+  const indices = [
+    // bottom
+    0, 2, 1,  0, 3, 2,
+    // top
+    4, 5, 6,  4, 6, 7,
+    // front (-Y)
+    0, 1, 5,  0, 5, 4,
+    // back (+Y)
+    2, 3, 7,  2, 7, 6,
+    // left (-X)
+    0, 4, 7,  0, 7, 3,
+    // right (+X)
+    1, 2, 6,  1, 6, 5,
+  ];
+
+  // Simple vertex normals: average of adjacent faces ≈ pointing outward.
+  // For a tiny box this is fine.
+  const vn: number[] = [];
+  for (let i = 0; i < 8; i++) {
+    const x = positions[i * 3] - bx;
+    const y = positions[i * 3 + 1] - by;
+    const z = positions[i * 3 + 2] - (bz + height / 2);
+    const len = Math.hypot(x, y, z) || 1;
+    vn.push(x / len, y / len, z / len);
+  }
+
+  return { positions, normals: vn, indices };
 }
 
 // -- Matching + merging --
@@ -297,21 +370,32 @@ function buildDetectionMesh(
 
       const face = faces[bestIdx];
 
-      // Panel size: fixed reasonable defaults per label type.
-      const halfW = det.label === "photovoltaic solar panel" ? 0.8 : 0.4;
-      const halfH = det.label === "chimney" ? 0.3 : 0.35;
-
       const center: [number, number, number] = [
         face.cx + east,
         face.cy + north,
         face.cz,
       ];
 
-      const quad = buildRoofQuad(center, face.normal, halfW, halfH);
-      for (const p of quad.positions) allPos.push(p);
-      for (const n of quad.normals) allNrm.push(n);
-      for (const idx of quad.indices) allIdx.push(idx + vOffset);
-      vOffset += 4;
+      let mesh: MeshData;
+      let vertCount: number;
+      if (det.label === "chimney") {
+        // 3D box rising 0.6m from the roof — looks like a chimney stack.
+        mesh = buildChimneyBox(center, face.normal, 0.25, 0.25, 0.6);
+        vertCount = 8;
+      } else if (det.label === "photovoltaic solar panel") {
+        // Flat dark rectangle ~1.6m × 1m — standard PV module size.
+        mesh = buildRoofQuad(center, face.normal, 0.8, 0.5);
+        vertCount = 4;
+      } else {
+        // Roof window: smaller flat rectangle ~0.7m × 0.5m.
+        mesh = buildRoofQuad(center, face.normal, 0.35, 0.25);
+        vertCount = 4;
+      }
+
+      for (const p of mesh.positions) allPos.push(p);
+      for (const n of mesh.normals) allNrm.push(n);
+      for (const idx of mesh.indices) allIdx.push(idx + vOffset);
+      vOffset += vertCount;
     }
   }
 
