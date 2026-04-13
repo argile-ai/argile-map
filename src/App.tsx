@@ -10,6 +10,7 @@ import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
 import { mergeBuildings } from "./mergeBuildings";
+import { RiskLayerPanel } from "./RiskLayerPanel";
 import type { CityJsonBuilding } from "./types";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
@@ -259,10 +260,11 @@ export function App() {
       </MapGL>
       <AddressSearch onSelect={onAddressSelect} />
       <Compass bearing={bearing} onBearingChange={onCompassBearing} />
+      <RiskLayerPanel mapRef={mapRef} />
       <div
         style={{
           position: "absolute",
-          top: 12,
+          bottom: 32,
           left: 12,
           padding: "8px 12px",
           background: "rgba(20,20,30,0.85)",
@@ -279,22 +281,22 @@ export function App() {
         </div>
         {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
           <div style={{ opacity: 0.75 }}>
-            Zoom in to load 3D buildings (z≥{MIN_ZOOM_FOR_BUILDINGS})
+            Zoomez pour charger les bâtiments 3D (z≥{MIN_ZOOM_FOR_BUILDINGS})
           </div>
         ) : (
           <>
             <div>
-              {parsed.length} / {buildings.length} buildings rendered
+              {parsed.length} / {buildings.length} bâtiments affichés
             </div>
-            <div>{detections.length} detections in view</div>
+            <div>{detections.length} détections en vue</div>
             <div style={{ opacity: 0.75, marginTop: 2 }}>
               {status.status === "loading"
-                ? "Loading viewport…"
+                ? "Chargement…"
                 : status.status === "ready"
-                  ? "Loaded"
+                  ? "Chargé"
                   : status.status === "error"
-                    ? "Failed"
-                    : "Idle"}
+                    ? "Erreur"
+                    : ""}
             </div>
           </>
         )}
