@@ -90,65 +90,6 @@ function triangleNormal(
   return [nx, ny, nz];
 }
 
-type RoofHit = {
-  z: number;
-  normal: [number, number, number];
-};
-
-/**
- * Find the roof triangle containing (x, y) via 2D barycentric test.
- * Returns interpolated Z and the triangle's face normal.
- * Falls back to nearest vertex / nearest centroid if no triangle contains
- * the point (edge cases from imprecise detection coords).
- */
-function findRoofSurfaceAt(
-  x: number,
-  y: number,
-  roof: Float32Array,
-): RoofHit | null {
-  const triCount = roof.length / 9;
-  if (triCount === 0) return null;
-
-  // Pass 1: exact barycentric hit
-  for (let t = 0; t < triCount; t++) {
-    const b = t * 9;
-    const ax = roof[b], ay = roof[b + 1], az = roof[b + 2];
-    const bx = roof[b + 3], by = roof[b + 4], bz = roof[b + 5];
-    const cx = roof[b + 6], cy = roof[b + 7], cz = roof[b + 8];
-
-    const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
-    if (Math.abs(denom) < 1e-10) continue;
-
-    const u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denom;
-    const v = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denom;
-    const w = 1 - u - v;
-
-    if (u >= -0.05 && v >= -0.05 && w >= -0.05) {
-      return {
-        z: u * az + v * bz + w * cz,
-        normal: triangleNormal(roof, b),
-      };
-    }
-  }
-
-  // Pass 2: fallback — nearest centroid
-  let bestDist = Infinity;
-  let bestZ = 0;
-  let bestNormal: [number, number, number] = [0, 0, 1];
-  for (let t = 0; t < triCount; t++) {
-    const b = t * 9;
-    const centX = (roof[b] + roof[b + 3] + roof[b + 6]) / 3;
-    const centY = (roof[b + 1] + roof[b + 4] + roof[b + 7]) / 3;
-    const centZ = (roof[b + 2] + roof[b + 5] + roof[b + 8]) / 3;
-    const dist = (centX - x) ** 2 + (centY - y) ** 2;
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestZ = centZ;
-      bestNormal = triangleNormal(roof, b);
-    }
-  }
-  return { z: bestZ, normal: bestNormal };
-}
 
 /**
  * Build a local coordinate frame on the roof surface:
@@ -260,6 +201,35 @@ function matchDetections(
   return matched;
 }
 
+/**
+ * For each roof triangle, compute its centroid + normal. Used to distribute
+ * detections across the roof surface — each detection gets the NEAREST roof
+ * triangle centroid, which guarantees the panel always sits flat on a real
+ * roof face (no wall placement, no floating).
+ */
+type RoofFace = {
+  cx: number;
+  cy: number;
+  cz: number;
+  normal: [number, number, number];
+};
+
+function extractRoofFaces(b: ParsedBuilding): RoofFace[] {
+  const roof = extractRoofPositions(b);
+  const triCount = roof.length / 9;
+  const faces: RoofFace[] = [];
+  for (let t = 0; t < triCount; t++) {
+    const base = t * 9;
+    faces.push({
+      cx: (roof[base] + roof[base + 3] + roof[base + 6]) / 3,
+      cy: (roof[base + 1] + roof[base + 4] + roof[base + 7]) / 3,
+      cz: (roof[base + 2] + roof[base + 5] + roof[base + 8]) / 3,
+      normal: triangleNormal(roof, base),
+    });
+  }
+  return faces;
+}
+
 function buildDetectionMesh(
   matched: MatchedDetection[],
   origin: { lat: number; lng: number },
@@ -274,65 +244,75 @@ function buildDetectionMesh(
   const allIdx: number[] = [];
   let vOffset = 0;
 
-  // Cache roof positions per building.
-  const roofCache = new Map<string, Float32Array>();
-
+  // Group detections by building.
+  const byBuilding = new Map<string, { building: ParsedBuilding; detections: Detection[] }>();
   for (const m of matched) {
-    const b = m.building;
-    const det = m.detection;
-
-    // Get the detection's WGS84 center. Prefer geo bbox if available.
-    let detLng: number;
-    let detLat: number;
-    if (det.geo_xmin != null && det.geo_xmax != null && det.geo_ymin != null && det.geo_ymax != null) {
-      detLng = (det.geo_xmin + det.geo_xmax) / 2;
-      detLat = (det.geo_ymin + det.geo_ymax) / 2;
+    const entry = byBuilding.get(m.building.geopf_id);
+    if (entry) {
+      entry.detections.push(m.detection);
     } else {
-      // Fallback: building centroid (clustered but visible).
-      detLng = det.center_lon;
-      detLat = det.center_lat;
+      byBuilding.set(m.building.geopf_id, {
+        building: m.building,
+        detections: [m.detection],
+      });
     }
+  }
 
-    // Convert the detection's WGS84 position to the building's local frame
-    // (east/north meters from the building's centroid).
-    const localX = (detLng - b.lng) * mPerDegLng;
-    const localY = (detLat - b.lat) * mPerDegLat;
+  for (const { building: b, detections: dets } of byBuilding.values()) {
+    const faces = extractRoofFaces(b);
+    if (faces.length === 0) continue;
 
-    // Get or compute roof triangles for this building.
-    let roof = roofCache.get(b.geopf_id);
-    if (roof === undefined) {
-      roof = extractRoofPositions(b);
-      roofCache.set(b.geopf_id, roof);
-    }
-
-    // Find the roof triangle at this XY and get its Z + normal.
-    const hit = findRoofSurfaceAt(localX, localY, roof);
-    if (!hit) continue;
-
-    // Detection size from geo bbox (meters), or fixed default.
-    let halfW = 0.5;
-    let halfH = 0.4;
-    if (det.geo_xmin != null && det.geo_xmax != null && det.geo_ymin != null && det.geo_ymax != null) {
-      halfW = Math.max(0.2, ((det.geo_xmax - det.geo_xmin) * mPerDegLng) / 2);
-      halfH = Math.max(0.2, ((det.geo_ymax - det.geo_ymin) * mPerDegLat) / 2);
-    }
-
-    // Build the quad in the building's local frame, then offset to the
-    // merged frame (building lng/lat → origin lng/lat).
+    // Building's offset in the merged frame.
     const east = (b.lng - origin.lng) * mPerDegLng;
     const north = (b.lat - origin.lat) * mPerDegLat;
 
-    const center: [number, number, number] = [
-      localX + east,
-      localY + north,
-      hit.z,
-    ];
+    // Sort detections by score descending so highest-confidence gets the
+    // best roof face (most central).
+    dets.sort((a, b) => b.score - a.score);
 
-    const quad = buildRoofQuad(center, hit.normal, halfW, halfH);
-    for (const p of quad.positions) allPos.push(p);
-    for (const n of quad.normals) allNrm.push(n);
-    for (const idx of quad.indices) allIdx.push(idx + vOffset);
-    vOffset += 4;
+    // Track used faces so multiple detections on the same building don't
+    // stack on the same triangle.
+    const usedFaces = new Set<number>();
+
+    for (const det of dets) {
+      // Find the nearest UNUSED roof face centroid.
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < faces.length; i++) {
+        if (usedFaces.has(i)) continue;
+        // Use distance from the building's roof centroid (center of all
+        // faces) as a preference metric — faces closer to center are
+        // preferred so panels sit in the middle of the roof.
+        const f = faces[i];
+        const dist = f.cx * f.cx + f.cy * f.cy; // distance from local (0,0)
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+      // All faces used — reuse the first one (rare: more detections than
+      // roof triangles).
+      if (bestIdx < 0) bestIdx = 0;
+      usedFaces.add(bestIdx);
+
+      const face = faces[bestIdx];
+
+      // Panel size: fixed reasonable defaults per label type.
+      const halfW = det.label === "photovoltaic solar panel" ? 0.8 : 0.4;
+      const halfH = det.label === "chimney" ? 0.3 : 0.35;
+
+      const center: [number, number, number] = [
+        face.cx + east,
+        face.cy + north,
+        face.cz,
+      ];
+
+      const quad = buildRoofQuad(center, face.normal, halfW, halfH);
+      for (const p of quad.positions) allPos.push(p);
+      for (const n of quad.normals) allNrm.push(n);
+      for (const idx of quad.indices) allIdx.push(idx + vOffset);
+      vOffset += 4;
+    }
   }
 
   return {
