@@ -177,7 +177,7 @@ function buildRoofQuad(
  */
 function buildChimneyBox(
   center: [number, number, number],
-  normal: [number, number, number],
+  _normal: [number, number, number],
   halfW: number,
   halfH: number,
   height: number,
@@ -200,14 +200,6 @@ function buildChimneyBox(
     bx + halfW, by - halfH, bz + height,
     bx + halfW, by + halfH, bz + height,
     bx - halfW, by + halfH, bz + height,
-  ];
-
-  // Face normals (6 faces).
-  const normals = [
-    // bottom (unused visually but needed for the buffer)
-    0, 0, -1,  0, 0, -1,  0, 0, -1,  0, 0, -1,
-    // top
-    0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
   ];
 
   // Use the 8 vertices with per-face indexing. Since SimpleMeshLayer
