@@ -8,7 +8,6 @@
  * them per tree with per-instance position, scale, and color.
  */
 
-import { COORDINATE_SYSTEM } from "@deck.gl/core";
 import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 
 export type TreeFeature = {
@@ -139,27 +138,31 @@ type TreeInstance = {
   translation: [number, number, number];
 };
 
+const MIN_DISPLAY_CROWN_DIAMETER = 1.5;
+
 export function createTreeLayers(
   trees: TreeFeature[],
   // biome-ignore lint/suspicious/noExplicitAny: SimpleMeshLayer generics
 ): any[] {
-  if (trees.length === 0) return [];
+  const filtered = trees.filter((t) => t.crown_diameter_m >= MIN_DISPLAY_CROWN_DIAMETER);
+  if (filtered.length === 0) return [];
+  const trees_ = filtered;
 
-  // Crown instances: cone scaled by [crown_radius, crown_radius, crown_height]
-  // positioned at ground, elevated by trunk height via translation
-  const crownData: TreeInstance[] = trees.map((t) => {
+  // Crown: cone at trunk top, scaled by crown radius and crown height
+  const crownData: TreeInstance[] = trees_.map((t) => {
     const crownH = t.height_m * (t.is_conifer ? 0.7 : 0.5);
     const r = Math.max(0.5, t.crown_diameter_m / 2);
+    const trunkH = t.height_m - crownH;
     return {
       position: t.position,
       color: crownColor(t.height_m, t.is_conifer),
       scale: [r, r, crownH],
-      translation: [0, 0, t.height_m - crownH], // elevate cone base
+      translation: [0, 0, trunkH],
     };
   });
 
-  // Trunk instances: thin cylinder
-  const trunkData: TreeInstance[] = trees.map((t) => {
+  // Trunk: thin cylinder from ground
+  const trunkData: TreeInstance[] = trees_.map((t) => {
     const trunkH = t.height_m * (t.is_conifer ? 0.3 : 0.5);
     return {
       position: t.position,
