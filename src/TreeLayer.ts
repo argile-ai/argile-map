@@ -10,7 +10,8 @@
 import { ScatterplotLayer } from "@deck.gl/layers";
 
 export type TreeFeature = {
-  position: [number, number];
+  /** [lng, lat, elevation_m] — elevation = tree height so the disc floats at canopy level */
+  position: [number, number, number];
   height_m: number;
   crown_diameter_m: number;
   crown_area_m2: number;
