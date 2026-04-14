@@ -11,7 +11,9 @@ import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
 import { mergeBuildings } from "./mergeBuildings";
 import { RiskLayerPanel } from "./RiskLayerPanel";
+import { createTreeLayer } from "./TreeLayer";
 import type { CityJsonBuilding } from "./types";
+import { useTreeData } from "./useTreeData";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
 import { useViewportStatus } from "./useViewportStatus";
@@ -161,6 +163,7 @@ export function App() {
   const origin = useFrozenOrigin(camera);
   const status = useViewportStatus();
   const detections = useViewportDetections(activeBounds);
+  const trees = useTreeData();
 
   /**
    * `onMoveEnd` fires once per drag (when the user releases) instead of
@@ -242,8 +245,10 @@ export function App() {
     const out: any[] = [];
     if (mesh && origin) out.push(createBuildingLayer(mesh, origin));
     out.push(...createDetectionLayer(detections, parsed, origin));
+    const treeLayer = createTreeLayer(trees);
+    if (treeLayer) out.push(treeLayer);
     return out;
-  }, [mesh, origin, detections, parsed]);
+  }, [mesh, origin, detections, parsed, trees]);
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -289,6 +294,7 @@ export function App() {
               {parsed.length} / {buildings.length} bâtiments affichés
             </div>
             <div>{detections.length} détections en vue</div>
+            {trees.length > 0 && <div>{trees.length} arbres</div>}
             <div style={{ opacity: 0.75, marginTop: 2 }}>
               {status.status === "loading"
                 ? "Chargement…"
