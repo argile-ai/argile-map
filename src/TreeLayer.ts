@@ -1,17 +1,18 @@
 /**
- * deck.gl layer for visualizing extracted trees.
+ * deck.gl layers for tree visualization.
  *
- * Each tree is rendered as a circle (ScatterplotLayer) with:
- *   - radius = crown_diameter / 2
- *   - color = green gradient by height (dark green = short, bright green = tall)
- *   - slight transparency so buildings underneath remain visible
+ * Each tree is rendered as:
+ *   - A thin brown column (trunk) from ground to crown base
+ *   - A wide green column (crown) from crown base to tree top
+ *
+ * This reads as "tree" at a glance while staying fast for 8K+ trees.
+ * Crown color is a green gradient by height.
  */
 
-import { ScatterplotLayer } from "@deck.gl/layers";
+import { ColumnLayer } from "@deck.gl/layers";
 
 export type TreeFeature = {
-  /** [lng, lat, elevation_m] — elevation = tree height so the disc floats at canopy level */
-  position: [number, number, number];
+  position: [number, number];
   height_m: number;
   crown_diameter_m: number;
   crown_area_m2: number;
@@ -19,35 +20,56 @@ export type TreeFeature = {
   n_points: number;
 };
 
-function heightToColor(h: number): [number, number, number, number] {
-  // 3m = dark green, 25m = bright lime
-  const t = Math.min(1, Math.max(0, (h - 3) / 22));
-  return [
-    Math.round(20 + t * 80),   // R: 20 → 100
-    Math.round(100 + t * 155), // G: 100 → 255
-    Math.round(30 + t * 20),   // B: 30 → 50
-    180,
-  ];
+function crownColor(h: number, conifer: boolean): [number, number, number, number] {
+  if (conifer) {
+    // Dark green for conifers
+    const t = Math.min(1, Math.max(0, (h - 3) / 20));
+    return [10 + t * 30, 80 + t * 60, 20 + t * 20, 200];
+  }
+  // Bright green for deciduous
+  const t = Math.min(1, Math.max(0, (h - 3) / 20));
+  return [30 + t * 60, 120 + t * 100, 20 + t * 30, 200];
 }
 
-export function createTreeLayer(
+export function createTreeLayers(
   trees: TreeFeature[],
-): ScatterplotLayer<TreeFeature> | null {
-  if (trees.length === 0) return null;
+): ColumnLayer<TreeFeature>[] {
+  if (trees.length === 0) return [];
 
-  return new ScatterplotLayer<TreeFeature>({
-    id: "argile-trees",
+  // Crown: wide green column (radius ~3m average crown)
+  const crown = new ColumnLayer<TreeFeature>({
+    id: "argile-tree-crowns",
     data: trees,
     pickable: true,
-    stroked: true,
-    filled: true,
+    diskResolution: 8,
+    radius: 3,
+    extruded: true,
     getPosition: (d) => d.position,
-    getRadius: (d) => Math.max(1, d.crown_diameter_m / 2),
-    getFillColor: (d) => heightToColor(d.height_m),
-    getLineColor: [30, 80, 20, 200],
-    getLineWidth: 0.2,
-    radiusUnits: "meters",
-    lineWidthUnits: "meters",
-    radiusMinPixels: 2,
+    getElevation: (d) => d.height_m * 0.5,
+    getFillColor: (d) => crownColor(d.height_m, d.is_conifer),
+    material: {
+      ambient: 0.4,
+      diffuse: 0.6,
+      shininess: 10,
+    },
   });
+
+  // Trunk: thin brown column from ground to crown base
+  const trunk = new ColumnLayer<TreeFeature>({
+    id: "argile-tree-trunks",
+    data: trees,
+    pickable: false,
+    diskResolution: 6,
+    radius: 0.15,
+    extruded: true,
+    getPosition: (d) => d.position,
+    getElevation: (d) => d.height_m * 0.5,
+    getFillColor: [120, 80, 40, 220],
+    material: {
+      ambient: 0.3,
+      diffuse: 0.7,
+    },
+  });
+
+  return [trunk, crown];
 }

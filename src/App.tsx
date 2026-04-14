@@ -11,7 +11,7 @@ import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
 import { mergeBuildings } from "./mergeBuildings";
 import { RiskLayerPanel } from "./RiskLayerPanel";
-import { createTreeLayer } from "./TreeLayer";
+import { createTreeLayers } from "./TreeLayer";
 import type { CityJsonBuilding } from "./types";
 import { useTreeData } from "./useTreeData";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
@@ -245,8 +245,7 @@ export function App() {
     const out: any[] = [];
     if (mesh && origin) out.push(createBuildingLayer(mesh, origin));
     out.push(...createDetectionLayer(detections, parsed, origin));
-    const treeLayer = createTreeLayer(trees);
-    if (treeLayer) out.push(treeLayer);
+    out.push(...createTreeLayers(trees));
     return out;
   }, [mesh, origin, detections, parsed, trees]);
 

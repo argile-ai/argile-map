@@ -23,11 +23,7 @@ export function useTreeData(): TreeFeature[] {
         const parsed: TreeFeature[] = data.features.map(
           // biome-ignore lint/suspicious/noExplicitAny: GeoJSON feature shape
           (f: any) => ({
-            position: [
-              f.geometry.coordinates[0],
-              f.geometry.coordinates[1],
-              f.properties.height_m, // elevate to canopy level
-            ] as [number, number, number],
+            position: f.geometry.coordinates as [number, number],
             height_m: f.properties.height_m,
             crown_diameter_m: f.properties.crown_diameter_m,
             crown_area_m2: f.properties.crown_area_m2,
