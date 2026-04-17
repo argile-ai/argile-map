@@ -76,22 +76,19 @@ export type DetectionSearchResponse = {
 };
 
 /**
- * One row of the cleabs ↔ batiment_groupe_id bridge served by argeme's
- * `/bdnb/cleabs-mapping/bbox`. A cleabs may appear on multiple rows when it
- * belongs to several groupes (~1.6% of cases); dedupe at the call site.
- */
-export type BdnbCleabsMapping = {
-  cleabs: string;
-  batiment_groupe_id: string;
-};
-
-/**
  * One row of the `/bdnb/complet/bbox` response from argeme. The full schema
  * has 60+ fields (drop-in replacement for api.bdnb.io) — we only type the
  * ones we actually read. Everything else stays on the wire but is ignored.
  */
 export type BdnbCompletRow = {
   batiment_groupe_id: string;
+  /**
+   * BDNB building-group footprint in Lambert 93 (EPSG:2154). Used client-side
+   * to match a CityJSON building to its BDNB groupe via point-in-polygon —
+   * the cityjson pipeline stores WFS feature IDs, not BDTOPO cleabs, so a
+   * direct ID join is not possible. See useViewportBdnb for the lookup.
+   */
+  geom_groupe?: GeoJSON.MultiPolygon | GeoJSON.Polygon | null;
   mat_toit_txt?: string | null;
   mat_mur_txt?: string | null;
   annee_construction?: number | null;

@@ -61,6 +61,13 @@ export type ParsedBuilding = {
   /** WGS84 centroid of the building, used as the anchor for the local frame. */
   lat: number;
   lng: number;
+  /**
+   * Lambert 93 (EPSG:2154) centroid of the building, derived from the CityJSON
+   * metadata `geographicalExtent`. Used for point-in-polygon joins against
+   * BDNB geom_groupe (which is also in Lambert 93) — avoids pulling in a
+   * WGS84↔Lambert93 projection library on the client.
+   */
+  lambert93Center: [number, number] | null;
   /** Triangle soup in local meters (east/north/up), centered at (0, 0). */
   soup: TriangleSoup;
   /** Height of the highest triangle above the local z origin. */

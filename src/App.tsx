@@ -236,7 +236,12 @@ export function App() {
   const meshes = useMemo(() => {
     if (!origin || parsed.length === 0) return null;
     const materialOf = (pb: ParsedBuilding): RoofMaterial | null => {
-      const row = bdnb.get(pb.geopf_id);
+      // Geometric join: find the BDNB groupe whose Lambert 93 footprint
+      // contains the building's Lambert 93 centroid. Buildings without
+      // geographicalExtent metadata (shouldn't happen in practice) fall
+      // through to the body mesh.
+      if (!pb.lambert93Center) return null;
+      const row = bdnb.findByLambert93Point(pb.lambert93Center[0], pb.lambert93Center[1]);
       if (!row) return null;
       const cat = classifyRoofMaterial(row.mat_toit_txt);
       // Don't split off an "unknown" roof mesh — those triangles stay in the

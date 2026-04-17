@@ -1,6 +1,5 @@
 import { config } from "./config";
 import type {
-  BdnbCleabsMapping,
   BdnbCompletRow,
   CityJsonBuilding,
   CityJsonSearchResponse,
@@ -94,37 +93,6 @@ export async function searchDetectionsByBounds(params: {
   }
   const data = (await response.json()) as DetectionSearchResponse;
   return data.detections;
-}
-
-/**
- * Fetch the cleabs -> batiment_groupe_id bridge rows for every BDNB group
- * whose centroid falls in `bounds`. Required because our parquets index by
- * BDTOPO cleabs while BDNB indexes by groupe_id — this endpoint closes the
- * gap so we can hydrate any BDNB attribute (`mat_toit_txt`, `mat_mur_txt`,
- * DPE, etc.) via a subsequent /bdnb/complet/* call.
- *
- * Sends the bounds in WGS84 (`srid=4326`) so the client doesn't need a
- * Lambert 93 projection library; PostGIS reprojects server-side.
- */
-export async function searchCleabsMapping(params: {
-  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
-  limit?: number;
-  signal?: AbortSignal;
-}): Promise<BdnbCleabsMapping[]> {
-  const { bounds, limit = 5000, signal } = params;
-  const qs = new URLSearchParams({
-    min_x: String(bounds.minLng),
-    max_x: String(bounds.maxLng),
-    min_y: String(bounds.minLat),
-    max_y: String(bounds.maxLat),
-    srid: "4326",
-    limit: String(limit),
-  });
-  const response = await fetch(`${config.argemeUrl}/bdnb/cleabs-mapping/bbox?${qs}`, { signal });
-  if (!response.ok) {
-    throw new Error(`argeme /bdnb/cleabs-mapping/bbox ${response.status}`);
-  }
-  return (await response.json()) as BdnbCleabsMapping[];
 }
 
 /**

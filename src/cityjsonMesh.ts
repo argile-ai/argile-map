@@ -22,15 +22,11 @@
 // biome-ignore lint/correctness/noUndeclaredDependencies: subpath of a declared dep
 import { CityJSONParser } from "cityjson-threejs-loader/src/parsers/CityJSONParser.js";
 import * as THREE from "three";
-import {
-  lambert93Convergence,
-  type ParsedBuilding,
-  type TriangleSoup,
-} from "./mergeBuildings";
+import { lambert93Convergence, type ParsedBuilding, type TriangleSoup } from "./mergeBuildings";
 import type { CityJsonBuilding } from "./types";
 
-export { mergeBuildings, rotateLambert93ToEastNorth } from "./mergeBuildings";
 export type { ParsedBuilding, TriangleSoup } from "./mergeBuildings";
+export { mergeBuildings, rotateLambert93ToEastNorth } from "./mergeBuildings";
 
 /**
  * CityJSON surface type indices (from defaultSemanticsColors in the loader):
@@ -205,10 +201,19 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
     }
   }
 
+  // The CityJSON metadata.geographicalExtent is [xmin, ymin, zmin, xmax, ymax, zmax]
+  // in Lambert 93 (confirmed by the referenceSystem URN in metadata). Using the
+  // bbox center is accurate enough for the BDNB point-in-polygon match — groupe
+  // footprints are typically much larger than the per-building bbox uncertainty.
+  const ext = building.cityjson.metadata?.geographicalExtent as number[] | undefined;
+  const lambert93Center: [number, number] | null =
+    Array.isArray(ext) && ext.length >= 6 ? [(ext[0] + ext[3]) / 2, (ext[1] + ext[4]) / 2] : null;
+
   return {
     geopf_id: building.geopf_id,
     lat: building.lat,
     lng: building.lng,
+    lambert93Center,
     soup,
     height: Math.max(0, maxZ - minZ),
     roofCentroid,

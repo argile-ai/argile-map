@@ -8,9 +8,10 @@
 import type { ParsedBuilding } from "../mergeBuildings";
 import type { CityJsonBuilding } from "../types";
 
-const POOL_SIZE = typeof navigator !== "undefined" && navigator.hardwareConcurrency
-  ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1))
-  : 2;
+const POOL_SIZE =
+  typeof navigator !== "undefined" && navigator.hardwareConcurrency
+    ? Math.min(4, Math.max(1, navigator.hardwareConcurrency - 1))
+    : 2;
 
 type Pending = {
   resolve: (p: ParsedBuilding | null) => void;
@@ -35,6 +36,7 @@ function ensureWorkers(): Worker[] {
         result: {
           lat: number;
           lng: number;
+          lambert93Center: [number, number] | null;
           height: number;
           positions: Float32Array;
           normals: Float32Array;
@@ -55,6 +57,7 @@ function ensureWorkers(): Worker[] {
         geopf_id: id.split("|", 2)[1] ?? "",
         lat: result.lat,
         lng: result.lng,
+        lambert93Center: result.lambert93Center,
         height: result.height,
         soup: {
           positions: result.positions,
@@ -74,9 +77,7 @@ function ensureWorkers(): Worker[] {
   return workers;
 }
 
-export function parseBuildingAsync(
-  building: CityJsonBuilding,
-): Promise<ParsedBuilding | null> {
+export function parseBuildingAsync(building: CityJsonBuilding): Promise<ParsedBuilding | null> {
   const pool = ensureWorkers();
   const worker = pool[nextWorker % pool.length];
   nextWorker++;

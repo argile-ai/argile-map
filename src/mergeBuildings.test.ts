@@ -27,6 +27,7 @@ function unitTriangle(geopf_id: string, lat: number, lng: number): ParsedBuildin
     lat,
     lng,
     height: 5,
+    lambert93Center: null,
     soup: {
       positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
       normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
@@ -100,6 +101,7 @@ describe("mergeBuildingsByMaterial", () => {
       lat,
       lng,
       height: 5,
+      lambert93Center: null,
       soup: {
         positions: new Float32Array([...wallVerts, ...roofVerts]),
         normals: new Float32Array([...wallN, ...roofN]),
