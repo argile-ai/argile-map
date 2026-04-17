@@ -22,6 +22,7 @@
 import { COORDINATE_SYSTEM } from "@deck.gl/core";
 import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import type { TriangleSoup } from "./mergeBuildings";
+import { ROOF_COLORS, type RoofMaterial } from "./roofMaterials";
 
 type InstanceDatum = { position: [number, number, number] };
 
@@ -74,4 +75,44 @@ export function createBuildingLayer(
       mesh: mesh,
     },
   });
+}
+
+/**
+ * One SimpleMeshLayer per roof material, all anchored at the same origin.
+ * Split into layers rather than a single mesh with per-vertex colors because
+ * SimpleMeshLayer's color channel is per-instance — this also leaves room
+ * to swap a flat color for a material-specific texture layer-by-layer.
+ *
+ * Layer ids are stable (derived from the material name), so pans that keep
+ * the same set of materials reuse the GPU state.
+ */
+export function createRoofMaterialLayers(
+  roofsByMaterial: Map<RoofMaterial, DeckMesh>,
+  origin: { lat: number; lng: number },
+): SimpleMeshLayer<InstanceDatum>[] {
+  const data: InstanceDatum[] = [{ position: [0, 0, 0] }];
+  const layers: SimpleMeshLayer<InstanceDatum>[] = [];
+  for (const [material, mesh] of roofsByMaterial) {
+    const [r, g, b] = ROOF_COLORS[material];
+    layers.push(
+      new SimpleMeshLayer<InstanceDatum>({
+        id: `argile-roof-${material}`,
+        data,
+        mesh,
+        coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+        coordinateOrigin: [origin.lng, origin.lat, 0],
+        getPosition: (d) => d.position,
+        getColor: [r, g, b, 255],
+        material: {
+          ambient: 0.4,
+          diffuse: 0.7,
+          shininess: 20,
+          specularColor: [40, 40, 40],
+        },
+        pickable: false,
+        updateTriggers: { mesh },
+      }),
+    );
+  }
+  return layers;
 }

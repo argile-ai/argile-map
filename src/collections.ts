@@ -17,9 +17,9 @@
  * atomically: buildings no longer visible are dropped, new ones inserted.
  */
 
-import { createCollection, localOnlyCollectionOptions } from "@tanstack/react-db";
 import { QueryClient } from "@tanstack/query-core";
-import type { CityJsonBuilding } from "./types";
+import { createCollection, localOnlyCollectionOptions } from "@tanstack/react-db";
+import type { BdnbCompletRow, CityJsonBuilding } from "./types";
 
 /** TanStack Query client used as a per-bbox HTTP cache. */
 export const queryClient = new QueryClient({
@@ -41,6 +41,18 @@ export const buildingsCollection = createCollection(
   localOnlyCollectionOptions<CityJsonBuilding, string>({
     id: "buildings",
     getKey: (b) => b.geopf_id,
+  }),
+);
+
+/**
+ * BDNB `batiment_groupe_complet` rows fed by /bdnb/complet/bbox, keyed by
+ * batiment_groupe_id. Carries mat_toit_txt today, all the other 60+ fields
+ * stay on the wire for future features.
+ */
+export const bdnbCompletCollection = createCollection(
+  localOnlyCollectionOptions<BdnbCompletRow, string>({
+    id: "bdnb-complet",
+    getKey: (r) => r.batiment_groupe_id,
   }),
 );
 
@@ -106,4 +118,19 @@ export function setViewportBuildings(buildings: CityJsonBuilding[]): void {
   currentStatus = "ready";
   currentError = null;
   notifyStatus();
+}
+
+/** Replace the BDNB complet rows atomically. */
+export function setViewportBdnbComplet(rows: BdnbCompletRow[]): void {
+  const nextKeys = new Set(rows.map((r) => r.batiment_groupe_id));
+  for (const existing of [...bdnbCompletCollection.values()]) {
+    if (!nextKeys.has(existing.batiment_groupe_id)) {
+      bdnbCompletCollection.delete(existing.batiment_groupe_id);
+    }
+  }
+  for (const r of rows) {
+    if (!bdnbCompletCollection.has(r.batiment_groupe_id)) {
+      bdnbCompletCollection.insert(r);
+    }
+  }
 }

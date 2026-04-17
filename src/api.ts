@@ -1,5 +1,6 @@
 import { config } from "./config";
 import type {
+  BdnbCompletRow,
   CityJsonBuilding,
   CityJsonSearchResponse,
   Detection,
@@ -92,4 +93,31 @@ export async function searchDetectionsByBounds(params: {
   }
   const data = (await response.json()) as DetectionSearchResponse;
   return data.detections;
+}
+
+/**
+ * Fetch full `batiment_groupe_complet` rows (60+ fields including
+ * `mat_toit_txt`, `mat_mur_txt`, `annee_construction`, DPE, …) for every
+ * groupe whose centroid falls in `bounds`.
+ *
+ * The argeme endpoint is a drop-in mirror of api.bdnb.io — we read whatever
+ * fields we want off the rows and let the rest stay idle.
+ */
+export async function searchBdnbComplet(params: {
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  signal?: AbortSignal;
+}): Promise<BdnbCompletRow[]> {
+  const { bounds, signal } = params;
+  const qs = new URLSearchParams({
+    xmin: String(bounds.minLng),
+    xmax: String(bounds.maxLng),
+    ymin: String(bounds.minLat),
+    ymax: String(bounds.maxLat),
+    srid: "4326",
+  });
+  const response = await fetch(`${config.argemeUrl}/bdnb/complet/bbox?${qs}`, { signal });
+  if (!response.ok) {
+    throw new Error(`argeme /bdnb/complet/bbox ${response.status}`);
+  }
+  return (await response.json()) as BdnbCompletRow[];
 }

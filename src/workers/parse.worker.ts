@@ -20,6 +20,7 @@ type InMessage = {
 type OutResult = {
   lat: number;
   lng: number;
+  lambert93Center: [number, number] | null;
   height: number;
   positions: Float32Array;
   normals: Float32Array;
@@ -46,6 +47,7 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
     result: {
       lat: parsed.lat,
       lng: parsed.lng,
+      lambert93Center: parsed.lambert93Center,
       height: parsed.height,
       positions: parsed.soup.positions,
       normals: parsed.soup.normals,

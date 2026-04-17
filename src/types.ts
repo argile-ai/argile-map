@@ -51,10 +51,7 @@ export type CityGeometry = {
  * georeferenced bboxes yet, so we only get pixel bboxes + the building
  * centroid — we render markers at the centroid + a fixed roof elevation.
  */
-export type DetectionLabel =
-  | "roof window"
-  | "photovoltaic solar panel"
-  | "chimney";
+export type DetectionLabel = "roof window" | "photovoltaic solar panel" | "chimney";
 
 export type Detection = {
   building_id: string;
@@ -78,3 +75,24 @@ export type DetectionSearchResponse = {
   detections: Detection[];
 };
 
+/**
+ * One row of the `/bdnb/complet/bbox` response from argeme. The full schema
+ * has 60+ fields (drop-in replacement for api.bdnb.io) — we only type the
+ * ones we actually read. Everything else stays on the wire but is ignored.
+ */
+export type BdnbCompletRow = {
+  batiment_groupe_id: string;
+  /**
+   * BDNB building-group footprint in Lambert 93 (EPSG:2154). Used client-side
+   * to match a CityJSON building to its BDNB groupe via point-in-polygon —
+   * the cityjson pipeline stores WFS feature IDs, not BDTOPO cleabs, so a
+   * direct ID join is not possible. See useViewportBdnb for the lookup.
+   */
+  geom_groupe?: GeoJSON.MultiPolygon | GeoJSON.Polygon | null;
+  mat_toit_txt?: string | null;
+  mat_mur_txt?: string | null;
+  annee_construction?: number | null;
+  nb_niveau?: number | null;
+  hauteur_mean?: number | null;
+  usage_principal_bdnb_open?: string | null;
+};

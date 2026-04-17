@@ -29,6 +29,7 @@ function fakeBuilding(id: string, lat = 48.86, lng = 2.34): ParsedBuilding {
     lat,
     lng,
     height: 6,
+    lambert93Center: null,
     soup: {
       positions: new Float32Array([0, 0, 5, 1, 0, 5, 0, 1, 5]),
       normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),

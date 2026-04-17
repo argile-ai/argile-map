@@ -5,21 +5,28 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const upstream = env.VITE_ARGILE_API_URL ?? "https://ai-rgile.argile.ai";
+  const argeme = env.VITE_ARGEME_API_URL ?? "https://argeme.argile.app";
 
   return {
     plugins: [react()],
     server: {
       port: 5173,
       // Proxy API calls so the browser stays same-origin and we don't hit
-      // CORS during local development. The frontend picks up the `/api`
-      // base in dev (see src/config.ts) and the proxy rewrites it to the
-      // upstream.
+      // CORS during local development. The frontend picks up the `/api` and
+      // `/argeme` bases in dev (see src/config.ts) and the proxies rewrite
+      // them to the upstream services.
       proxy: {
         "/api": {
           target: upstream,
           changeOrigin: true,
           secure: true,
           rewrite: (path: string) => path.replace(/^\/api/, ""),
+        },
+        "/argeme": {
+          target: argeme,
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path: string) => path.replace(/^\/argeme/, ""),
         },
       },
     },

@@ -4,16 +4,18 @@ import { Map as MapGL, useControl, type MapRef } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { AddressSearch } from "./AddressSearch";
-import { createBuildingLayer, toDeckMesh } from "./BuildingLayer";
+import { createBuildingLayer, createRoofMaterialLayers, toDeckMesh } from "./BuildingLayer";
 import { Compass } from "./Compass";
 import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
 import { createDetectionLayer } from "./DetectionLayer";
-import { mergeBuildings } from "./mergeBuildings";
+import { mergeBuildingsByMaterial } from "./mergeBuildings";
 import { RiskLayerPanel } from "./RiskLayerPanel";
+import { classifyRoofMaterial, type RoofMaterial } from "./roofMaterials";
 import { createTreeLayers } from "./TreeLayer";
 import type { CityJsonBuilding } from "./types";
 import { useTreeData } from "./useTreeData";
+import { useViewportBdnb } from "./useViewportBdnb";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
 import { useViewportStatus } from "./useViewportStatus";
@@ -115,8 +117,7 @@ function useFrozenOrigin(
     // Haversine-free approximation: convert deltas to kilometers at the
     // origin's latitude.
     const dLat = (camera.lat - origin.lat) * 111;
-    const dLng =
-      (camera.lng - origin.lng) * 111 * Math.cos((origin.lat * Math.PI) / 180);
+    const dLng = (camera.lng - origin.lng) * 111 * Math.cos((origin.lat * Math.PI) / 180);
     if (Math.hypot(dLat, dLng) > MAX_DRIFT_KM) {
       setOrigin(camera);
     }
@@ -164,6 +165,7 @@ export function App() {
   const status = useViewportStatus();
   const detections = useViewportDetections(activeBounds);
   const trees = useTreeData();
+  const bdnb = useViewportBdnb(activeBounds);
 
   /**
    * `onMoveEnd` fires once per drag (when the user releases) instead of
@@ -199,6 +201,7 @@ export function App() {
   // Hide the basemap's shoe-box fill-extrusion building layer when we have
   // real CityJSON meshes. Show it again when we zoom out or have no buildings.
   const hasCityJsonBuildings = parsed.length > 0;
+  const materialCount = bdnb.size;
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -208,18 +211,11 @@ export function App() {
       for (const layer of style.layers) {
         // Hide shoe-box fill-extrusions when we have real CityJSON meshes.
         if (layer.type === "fill-extrusion" && /building/i.test(layer.id)) {
-          map.setLayoutProperty(
-            layer.id,
-            "visibility",
-            hasCityJsonBuildings ? "none" : "visible",
-          );
+          map.setLayoutProperty(layer.id, "visibility", hasCityJsonBuildings ? "none" : "visible");
         }
         // Hide POI / building name labels (e.g. "Hôtel de Ville") but keep
         // street names (road_*), place names (place_*), and house numbers.
-        if (
-          layer.type === "symbol" &&
-          /^(poi|building)/i.test(layer.id)
-        ) {
+        if (layer.type === "symbol" && /^(poi|building)/i.test(layer.id)) {
           map.setLayoutProperty(layer.id, "visibility", "none");
         }
       }
@@ -229,25 +225,46 @@ export function App() {
     else map.once("styledata", toggle);
   }, [hasCityJsonBuildings]);
 
-  // Merge the parsed buildings into a single TriangleSoup anchored at the
-  // frozen origin. Memoized by (building set hash, origin) — pans that don't
-  // change either return the exact same mesh reference so deck.gl skips the
-  // GPU re-upload.
+  // Merge the parsed buildings into a body soup + one roof soup per known
+  // material category, anchored at the frozen origin. Memoized by
+  // (building set hash, origin, bdnb reference) — pans that don't change
+  // either return the exact same mesh references so deck.gl skips GPU
+  // re-uploads. `bdnb` is a fresh object only when its underlying data
+  // changed (see useViewportBdnb's useMemo).
   const hash = useMemo(() => buildingsHash(parsed), [parsed]);
-  const mesh = useMemo(() => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hash drives `parsed`.
+  const meshes = useMemo(() => {
     if (!origin || parsed.length === 0) return null;
-    return toDeckMesh(mergeBuildings(parsed, origin));
-    // biome-ignore lint/correctness/useExhaustiveDependencies: hash drives `parsed`
-  }, [hash, origin]);
+    const materialOf = (pb: ParsedBuilding): RoofMaterial | null => {
+      // Geometric join: find the BDNB groupe whose Lambert 93 footprint
+      // contains the building's Lambert 93 centroid. Buildings without
+      // geographicalExtent metadata (shouldn't happen in practice) fall
+      // through to the body mesh.
+      if (!pb.lambert93Center) return null;
+      const row = bdnb.findByLambert93Point(pb.lambert93Center[0], pb.lambert93Center[1]);
+      if (!row) return null;
+      const cat = classifyRoofMaterial(row.mat_toit_txt);
+      // Don't split off an "unknown" roof mesh — those triangles stay in the
+      // body soup so the fallback render matches the pre-BDNB behavior.
+      return cat === "unknown" ? null : cat;
+    };
+    const { body, roofsByMaterial } = mergeBuildingsByMaterial(parsed, origin, materialOf);
+    const roofMeshes = new Map<RoofMaterial, ReturnType<typeof toDeckMesh>>();
+    for (const [m, soup] of roofsByMaterial) roofMeshes.set(m, toDeckMesh(soup));
+    return { body: toDeckMesh(body), roofs: roofMeshes };
+  }, [hash, origin, bdnb]);
 
   const layers = useMemo(() => {
     // biome-ignore lint/suspicious/noExplicitAny: deck.gl Layer generic bleed.
     const out: any[] = [];
-    if (mesh && origin) out.push(createBuildingLayer(mesh, origin));
+    if (meshes && origin) {
+      out.push(createBuildingLayer(meshes.body, origin));
+      out.push(...createRoofMaterialLayers(meshes.roofs, origin));
+    }
     out.push(...createDetectionLayer(detections, parsed, origin));
     out.push(...createTreeLayers(trees));
     return out;
-  }, [mesh, origin, detections, parsed, trees]);
+  }, [meshes, origin, detections, parsed, trees]);
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -294,6 +311,7 @@ export function App() {
             </div>
             <div>{detections.length} détections en vue</div>
             {trees.length > 0 && <div>{trees.length} arbres</div>}
+            {materialCount > 0 && <div>{materialCount} toitures BDNB</div>}
             <div style={{ opacity: 0.75, marginTop: 2 }}>
               {status.status === "loading"
                 ? "Chargement…"
@@ -305,9 +323,7 @@ export function App() {
             </div>
           </>
         )}
-        {status.error && (
-          <div style={{ color: "#ff7979", marginTop: 4 }}>{status.error}</div>
-        )}
+        {status.error && <div style={{ color: "#ff7979", marginTop: 4 }}>{status.error}</div>}
       </div>
     </div>
   );

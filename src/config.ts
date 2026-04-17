@@ -8,8 +8,10 @@ export const config = {
   apiUrl: import.meta.env.DEV
     ? "/api"
     : (import.meta.env.VITE_ARGILE_API_URL ?? "https://ai-rgile.argile.ai"),
-  mapStyle:
-    import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
+  argemeUrl: import.meta.env.DEV
+    ? "/argeme"
+    : (import.meta.env.VITE_ARGEME_API_URL ?? "https://argeme.argile.app"),
+  mapStyle: import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
 } as const;
 
 // 90 rue des Marguerites, Antony (92).
