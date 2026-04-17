@@ -105,15 +105,18 @@ export async function searchDetectionsByBounds(params: {
  */
 export async function searchBdnbComplet(params: {
   bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  /** Server-side cap; argeme enforces max 5000. */
+  limit?: number;
   signal?: AbortSignal;
 }): Promise<BdnbCompletRow[]> {
-  const { bounds, signal } = params;
+  const { bounds, limit = 5000, signal } = params;
   const qs = new URLSearchParams({
     xmin: String(bounds.minLng),
     xmax: String(bounds.maxLng),
     ymin: String(bounds.minLat),
     ymax: String(bounds.maxLat),
     srid: "4326",
+    limit: String(limit),
   });
   const response = await fetch(`${config.argemeUrl}/bdnb/complet/bbox?${qs}`, { signal });
   if (!response.ok) {
