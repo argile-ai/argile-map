@@ -120,14 +120,19 @@ export function setViewportBuildings(buildings: CityJsonBuilding[]): void {
   notifyStatus();
 }
 
-/** Replace the BDNB complet rows atomically. */
+/**
+ * Accumulate BDNB complet rows across viewport updates. Unlike the buildings
+ * collection, we never evict rows here: each response covers only the 5000
+ * groupes closest to the current bbox (see `/bdnb/complet/bbox` server cap),
+ * and deleting rows from previous bboxes would make buildings flicker back
+ * to the tan body color every time the user pans away and returns. The
+ * geometric lookup (`findByLambert93Point` with a bbox prefilter) rejects
+ * out-of-viewport groupes in microseconds, so growing the set is free.
+ *
+ * Worst case memory: ~60 fields × 1 KB/row × a few thousand rows per hour of
+ * panning = a few MB. Session-scoped and well bounded.
+ */
 export function setViewportBdnbComplet(rows: BdnbCompletRow[]): void {
-  const nextKeys = new Set(rows.map((r) => r.batiment_groupe_id));
-  for (const existing of [...bdnbCompletCollection.values()]) {
-    if (!nextKeys.has(existing.batiment_groupe_id)) {
-      bdnbCompletCollection.delete(existing.batiment_groupe_id);
-    }
-  }
   for (const r of rows) {
     if (!bdnbCompletCollection.has(r.batiment_groupe_id)) {
       bdnbCompletCollection.insert(r);
