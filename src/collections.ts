@@ -19,7 +19,7 @@
 
 import { createCollection, localOnlyCollectionOptions } from "@tanstack/react-db";
 import { QueryClient } from "@tanstack/query-core";
-import type { CityJsonBuilding } from "./types";
+import type { BdnbCleabsMapping, BdnbCompletRow, CityJsonBuilding } from "./types";
 
 /** TanStack Query client used as a per-bbox HTTP cache. */
 export const queryClient = new QueryClient({
@@ -41,6 +41,30 @@ export const buildingsCollection = createCollection(
   localOnlyCollectionOptions<CityJsonBuilding, string>({
     id: "buildings",
     getKey: (b) => b.geopf_id,
+  }),
+);
+
+/**
+ * cleabs -> batiment_groupe_id bridge fed by /bdnb/cleabs-mapping/bbox.
+ * Lookups are by cleabs (our sat parquet grain); the value lets us index
+ * into `bdnbCompletCollection` to pull any BDNB attribute.
+ */
+export const cleabsMappingCollection = createCollection(
+  localOnlyCollectionOptions<BdnbCleabsMapping, string>({
+    id: "cleabs-mapping",
+    getKey: (m) => m.cleabs,
+  }),
+);
+
+/**
+ * BDNB `batiment_groupe_complet` rows fed by /bdnb/complet/bbox, keyed by
+ * batiment_groupe_id. Carries mat_toit_txt today, all the other 60+ fields
+ * stay on the wire for future features.
+ */
+export const bdnbCompletCollection = createCollection(
+  localOnlyCollectionOptions<BdnbCompletRow, string>({
+    id: "bdnb-complet",
+    getKey: (r) => r.batiment_groupe_id,
   }),
 );
 
@@ -106,4 +130,38 @@ export function setViewportBuildings(buildings: CityJsonBuilding[]): void {
   currentStatus = "ready";
   currentError = null;
   notifyStatus();
+}
+
+/**
+ * Replace the cleabs→groupe mapping atomically — same semantics as
+ * `setViewportBuildings`. Stale rows outside the current viewport are
+ * dropped so memory stays bounded.
+ */
+export function setViewportCleabsMapping(rows: BdnbCleabsMapping[]): void {
+  const nextKeys = new Set(rows.map((r) => r.cleabs));
+  for (const existing of [...cleabsMappingCollection.values()]) {
+    if (!nextKeys.has(existing.cleabs)) {
+      cleabsMappingCollection.delete(existing.cleabs);
+    }
+  }
+  for (const r of rows) {
+    if (!cleabsMappingCollection.has(r.cleabs)) {
+      cleabsMappingCollection.insert(r);
+    }
+  }
+}
+
+/** Replace the BDNB complet rows atomically. */
+export function setViewportBdnbComplet(rows: BdnbCompletRow[]): void {
+  const nextKeys = new Set(rows.map((r) => r.batiment_groupe_id));
+  for (const existing of [...bdnbCompletCollection.values()]) {
+    if (!nextKeys.has(existing.batiment_groupe_id)) {
+      bdnbCompletCollection.delete(existing.batiment_groupe_id);
+    }
+  }
+  for (const r of rows) {
+    if (!bdnbCompletCollection.has(r.batiment_groupe_id)) {
+      bdnbCompletCollection.insert(r);
+    }
+  }
 }

@@ -15,8 +15,9 @@ import {
   LAMBERT93_N,
   lambert93Convergence,
   mergeBuildings,
-  rotateLambert93ToEastNorth,
+  mergeBuildingsByMaterial,
   type ParsedBuilding,
+  rotateLambert93ToEastNorth,
 } from "./mergeBuildings";
 
 /** Build a ParsedBuilding with a single unit triangle at the origin. */
@@ -44,13 +45,9 @@ describe("mergeBuildings", () => {
 
     const merged = mergeBuildings([a, b], { lat: a.lat, lng: a.lng });
 
-    expect(merged.positions.length).toBe(
-      a.soup.positions.length + b.soup.positions.length,
-    );
+    expect(merged.positions.length).toBe(a.soup.positions.length + b.soup.positions.length);
     expect(merged.normals.length).toBe(merged.positions.length);
-    expect(merged.indices.length).toBe(
-      a.soup.indices.length + b.soup.indices.length,
-    );
+    expect(merged.indices.length).toBe(a.soup.indices.length + b.soup.indices.length);
     // Second triangle's indices shifted by the 3 vertices of A.
     expect(Array.from(merged.indices.slice(3))).toEqual([3, 4, 5]);
   });
@@ -87,6 +84,73 @@ describe("mergeBuildings", () => {
     expect(merged.positions.length).toBe(0);
     expect(merged.normals.length).toBe(0);
     expect(merged.indices.length).toBe(0);
+  });
+});
+
+describe("mergeBuildingsByMaterial", () => {
+  /** Build a two-triangle parsed building: one wall (type 1), one roof (type 2). */
+  function wallAndRoof(geopf_id: string, lat: number, lng: number): ParsedBuilding {
+    // 6 vertices total — verts 0..2 form the wall triangle, 3..5 the roof.
+    const wallVerts = [0, 0, 0, 1, 0, 0, 0, 0, 5];
+    const roofVerts = [0, 0, 5, 1, 0, 5, 1, 1, 5];
+    const wallN = [0, -1, 0, 0, -1, 0, 0, -1, 0];
+    const roofN = [0, 0, 1, 0, 0, 1, 0, 0, 1];
+    return {
+      geopf_id,
+      lat,
+      lng,
+      height: 5,
+      soup: {
+        positions: new Float32Array([...wallVerts, ...roofVerts]),
+        normals: new Float32Array([...wallN, ...roofN]),
+        indices: new Uint32Array([0, 1, 2, 3, 4, 5]),
+        surfaceTypes: new Int32Array([1, 1, 1, 2, 2, 2]),
+      },
+      roofCentroid: null,
+      roofNormal: null,
+    };
+  }
+
+  it("routes roof triangles of material-tagged buildings into the material soup", () => {
+    const origin = { lat: 48.8566, lng: 2.3522 };
+    const a = wallAndRoof("a", origin.lat, origin.lng);
+    const { body, roofsByMaterial } = mergeBuildingsByMaterial(
+      [a],
+      origin,
+      () => "tuiles" as const,
+    );
+    expect(roofsByMaterial.get("tuiles")).toBeDefined();
+    // 3 roof vertices go into the "tuiles" mesh; 3 wall vertices go into body.
+    expect(roofsByMaterial.get("tuiles")!.positions.length).toBe(9);
+    expect(body.positions.length).toBe(9);
+  });
+
+  it("folds roofs back into the body when materialOf returns null", () => {
+    const origin = { lat: 48.8566, lng: 2.3522 };
+    const a = wallAndRoof("a", origin.lat, origin.lng);
+    const { body, roofsByMaterial } = mergeBuildingsByMaterial([a], origin, () => null);
+    expect(roofsByMaterial.size).toBe(0);
+    // Both triangles go into the body.
+    expect(body.positions.length).toBe(18);
+  });
+
+  it("splits two buildings into two material soups", () => {
+    const origin = { lat: 48.8566, lng: 2.3522 };
+    const a = wallAndRoof("a", origin.lat, origin.lng);
+    const b = wallAndRoof("b", origin.lat + 0.0005, origin.lng + 0.001);
+    const { roofsByMaterial } = mergeBuildingsByMaterial([a, b], origin, (pb) =>
+      pb.geopf_id === "a" ? ("tuiles" as const) : ("ardoises" as const),
+    );
+    expect(roofsByMaterial.get("tuiles")!.positions.length).toBe(9);
+    expect(roofsByMaterial.get("ardoises")!.positions.length).toBe(9);
+  });
+
+  it("emits indices that exactly cover its positions (no sharing)", () => {
+    const a = wallAndRoof("a", 48.8566, 2.3522);
+    const { body } = mergeBuildingsByMaterial([a], { lat: a.lat, lng: a.lng }, () => null);
+    // 6 verts expected (wall + roof). Indices are trivial 0..5.
+    expect(body.positions.length / 3).toBe(6);
+    expect(Array.from(body.indices)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 

@@ -130,3 +130,91 @@ export function mergeBuildings(
     surfaceTypes: new Int32Array(0), // not needed for the merged building mesh
   };
 }
+
+/** CityJSON surface type index for roof polygons. */
+const SURFACE_TYPE_ROOF = 2;
+
+/**
+ * Split each building's triangles by (roof vs. body) and, for roofs, by the
+ * caller-provided material category. Returns one triangle soup per category;
+ * the render layer creates one SimpleMeshLayer per soup (cheap: N is at most
+ * 1 + number-of-material-categories).
+ *
+ * `materialOf` returns an arbitrary category string for a given building; the
+ * caller chooses the vocabulary (e.g. "tuiles" / "ardoises" / …). Buildings
+ * whose `materialOf` returns null have all their roof triangles folded into
+ * the body mesh — so the fallback render matches `mergeBuildings` exactly.
+ *
+ * Memory: each material soup duplicates vertices across triangles (no
+ * sharing) to avoid per-material remap lookups. For ~1k buildings × a few
+ * thousand triangles this is negligible.
+ */
+export function mergeBuildingsByMaterial<M extends string>(
+  buildings: ParsedBuilding[],
+  origin: { lat: number; lng: number },
+  materialOf: (b: ParsedBuilding) => M | null,
+): { body: TriangleSoup; roofsByMaterial: Map<M, TriangleSoup> } {
+  const R = 6_378_137;
+  const latRad = (origin.lat * Math.PI) / 180;
+  const metersPerDegLat = (Math.PI * R) / 180;
+  const metersPerDegLng = metersPerDegLat * Math.cos(latRad);
+
+  type Accum = { positions: number[]; normals: number[] };
+  const body: Accum = { positions: [], normals: [] };
+  const byMaterial = new Map<M, Accum>();
+
+  for (const b of buildings) {
+    const mat = materialOf(b);
+    const east = (b.lng - origin.lng) * metersPerDegLng;
+    const north = (b.lat - origin.lat) * metersPerDegLat;
+    const pos = b.soup.positions;
+    const nrm = b.soup.normals;
+    const idx = b.soup.indices;
+    const st = b.soup.surfaceTypes;
+
+    const pushVertex = (acc: Accum, v: number): void => {
+      acc.positions.push(pos[3 * v] + east, pos[3 * v + 1] + north, pos[3 * v + 2]);
+      acc.normals.push(nrm[3 * v], nrm[3 * v + 1], nrm[3 * v + 2]);
+    };
+
+    // Every 3 consecutive indices form a triangle. Classify via the first
+    // vertex's surface type — within a single CityJSON surface all three
+    // always share the same type.
+    for (let t = 0; t < idx.length; t += 3) {
+      const i0 = idx[t];
+      const i1 = idx[t + 1];
+      const i2 = idx[t + 2];
+      const isRoof = st.length > 0 && st[i0] === SURFACE_TYPE_ROOF;
+      const bucket =
+        isRoof && mat !== null
+          ? (byMaterial.get(mat) ??
+            (() => {
+              const a: Accum = { positions: [], normals: [] };
+              byMaterial.set(mat, a);
+              return a;
+            })())
+          : body;
+      pushVertex(bucket, i0);
+      pushVertex(bucket, i1);
+      pushVertex(bucket, i2);
+    }
+  }
+
+  const toSoup = (a: Accum): TriangleSoup => {
+    const n = a.positions.length / 3;
+    const indices = new Uint32Array(n);
+    for (let i = 0; i < n; i++) indices[i] = i;
+    return {
+      positions: new Float32Array(a.positions),
+      normals: new Float32Array(a.normals),
+      indices,
+      surfaceTypes: new Int32Array(0),
+    };
+  };
+
+  const roofsByMaterial = new Map<M, TriangleSoup>();
+  for (const [m, a] of byMaterial) {
+    if (a.positions.length > 0) roofsByMaterial.set(m, toSoup(a));
+  }
+  return { body: toSoup(body), roofsByMaterial };
+}
