@@ -35,7 +35,8 @@ function smoothBearing(target: number, prev: number): number {
 const SIZE = 48;
 const CX = SIZE / 2;
 const CY = SIZE / 2;
-const R = 18;
+const R = 13; // needle length — leaves room inside the circle for labels
+const LABEL_R = 18; // cardinal label radius, still inside the dial edge
 
 export function Compass({ bearing, onBearingChange }: Props) {
   const prevRef = useRef(bearing);
@@ -89,10 +90,9 @@ export function Compass({ bearing, onBearingChange }: Props) {
 
 function cardinalStyle(angle: number) {
   const a = (angle * Math.PI) / 180;
-  const lr = R + 4;
   return {
-    x: CX + Math.sin(a) * lr,
-    y: CY - Math.cos(a) * lr,
+    x: CX + Math.sin(a) * LABEL_R,
+    y: CY - Math.cos(a) * LABEL_R,
     textAnchor: "middle" as const,
     dominantBaseline: "central" as const,
     fontSize: 9,
