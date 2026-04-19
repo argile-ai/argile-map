@@ -154,7 +154,7 @@ export function App() {
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
   const [bearing, setBearing] = useState<number>(INITIAL_VIEW.bearing);
   const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.5);
-  const [treeMinHeight, setTreeMinHeight] = useState<number>(2.5);
+  const [treeMinHeight, setTreeMinHeight] = useState<number>(4);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const ROOF_WINDOW_MIN = 0.1;
   const TREE_HEIGHT_MIN = 2.5;
