@@ -47,9 +47,15 @@ export type CityGeometry = {
 
 /**
  * AI-detected roof feature (roof window, PV panel, chimney) from the
- * sat-api service (`/sat/detections/search`). The current DB doesn't have
- * georeferenced bboxes yet, so we only get pixel bboxes + the building
- * centroid — we render markers at the centroid + a fixed roof elevation.
+ * sat-api service (`/sat/detections/search`).
+ *
+ * `box_*` is the pixel bbox in the original satellite crop. `geo_*` is the
+ * same bbox reprojected to WGS84 (populated during import for recent
+ * detections, may be null for older rows).
+ *
+ * `center_lat`/`center_lon` is the BUILDING centroid, not the detection
+ * centroid — it is shared across every detection on the same building.
+ * To locate an individual detection, use the `geo_*` bbox centroid.
  */
 export type DetectionLabel = "roof window" | "photovoltaic solar panel" | "chimney";
 
@@ -61,11 +67,12 @@ export type Detection = {
   box_ymin: number;
   box_xmax: number;
   box_ymax: number;
-  /** Optional WGS84 georeferenced bbox (only populated for recent imports). */
+  /** Per-detection WGS84 bbox; may be null on older imports. */
   geo_xmin?: number | null;
   geo_ymin?: number | null;
   geo_xmax?: number | null;
   geo_ymax?: number | null;
+  /** Building centroid (shared across all detections on the same building). */
   center_lat: number;
   center_lon: number;
 };
