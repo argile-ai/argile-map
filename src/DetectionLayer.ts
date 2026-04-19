@@ -276,11 +276,24 @@ function matchDetections(detections: Detection[], buildings: ParsedBuilding[]): 
   if (buildings.length === 0) return [];
   const matched: MatchedDetection[] = [];
   for (const det of detections) {
+    // Prefer the detection's own geo-bbox centroid. center_lat/center_lon is
+    // the BACKEND building centroid (shared across every detection on that
+    // backend building). When one backend building maps to multiple frontend
+    // CityJSON polygons, all detections would otherwise nail to a single
+    // polygon — and windows physically on neighboring polygons render off-mesh.
+    const detLat =
+      det.geo_ymin != null && det.geo_ymax != null
+        ? (det.geo_ymin + det.geo_ymax) / 2
+        : det.center_lat;
+    const detLng =
+      det.geo_xmin != null && det.geo_xmax != null
+        ? (det.geo_xmin + det.geo_xmax) / 2
+        : det.center_lon;
     let best: ParsedBuilding | null = null;
     let bestDist = Infinity;
     for (const b of buildings) {
-      const dLat = det.center_lat - b.lat;
-      const dLng = det.center_lon - b.lng;
+      const dLat = detLat - b.lat;
+      const dLng = detLng - b.lng;
       const d = dLat * dLat + dLng * dLng;
       if (d < bestDist) {
         bestDist = d;
