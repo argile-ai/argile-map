@@ -333,7 +333,7 @@ export function App() {
                   </div>
                   <div>{detections.length} détections en vue</div>
                   {trees.length > 0 && <div>{trees.length} arbres</div>}
-                  {materialCount > 0 && <div>{materialCount} toitures BDNB</div>}
+                  {materialCount > 0 && <div>{materialCount} toitures</div>}
                   <div style={{ opacity: 0.75, marginTop: 2 }}>
                     {status.status === "loading"
                       ? "Chargement…"
