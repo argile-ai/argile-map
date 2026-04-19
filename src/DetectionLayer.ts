@@ -55,19 +55,22 @@ function extractRoofPositions(b: ParsedBuilding): Float32Array {
     )
       continue;
     positions.push(
-      soup.positions[i0 * 3], soup.positions[i0 * 3 + 1], soup.positions[i0 * 3 + 2],
-      soup.positions[i1 * 3], soup.positions[i1 * 3 + 1], soup.positions[i1 * 3 + 2],
-      soup.positions[i2 * 3], soup.positions[i2 * 3 + 1], soup.positions[i2 * 3 + 2],
+      soup.positions[i0 * 3],
+      soup.positions[i0 * 3 + 1],
+      soup.positions[i0 * 3 + 2],
+      soup.positions[i1 * 3],
+      soup.positions[i1 * 3 + 1],
+      soup.positions[i1 * 3 + 2],
+      soup.positions[i2 * 3],
+      soup.positions[i2 * 3 + 1],
+      soup.positions[i2 * 3 + 2],
     );
   }
   return new Float32Array(positions);
 }
 
 /** Compute the face normal of a triangle (9 consecutive floats). */
-function triangleNormal(
-  roof: Float32Array,
-  base: number,
-): [number, number, number] {
+function triangleNormal(roof: Float32Array, base: number): [number, number, number] {
   const e1x = roof[base + 3] - roof[base];
   const e1y = roof[base + 4] - roof[base + 1];
   const e1z = roof[base + 5] - roof[base + 2];
@@ -89,7 +92,6 @@ function triangleNormal(
   }
   return [nx, ny, nz];
 }
-
 
 /**
  * Build a local coordinate frame on the roof surface:
@@ -152,7 +154,12 @@ function buildRoofQuad(
   const cz = center[2] + normal[2] * SURFACE_OFFSET;
 
   const positions: number[] = [];
-  for (const [sw, sh] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+  for (const [sw, sh] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]) {
     positions.push(
       cx + r[0] * halfW * sw + sd[0] * halfH * sh,
       cy + r[1] * halfW * sw + sd[1] * halfH * sh,
@@ -162,10 +169,18 @@ function buildRoofQuad(
   return {
     positions,
     normals: [
-      normal[0], normal[1], normal[2],
-      normal[0], normal[1], normal[2],
-      normal[0], normal[1], normal[2],
-      normal[0], normal[1], normal[2],
+      normal[0],
+      normal[1],
+      normal[2],
+      normal[0],
+      normal[1],
+      normal[2],
+      normal[0],
+      normal[1],
+      normal[2],
+      normal[0],
+      normal[1],
+      normal[2],
     ],
     indices: [0, 1, 2, 0, 2, 3],
   };
@@ -191,15 +206,31 @@ function buildChimneyBox(
   // 4 bottom corners, 4 top corners (axis-aligned box).
   const positions = [
     // bottom face (z = bz)
-    bx - halfW, by - halfH, bz,
-    bx + halfW, by - halfH, bz,
-    bx + halfW, by + halfH, bz,
-    bx - halfW, by + halfH, bz,
+    bx - halfW,
+    by - halfH,
+    bz,
+    bx + halfW,
+    by - halfH,
+    bz,
+    bx + halfW,
+    by + halfH,
+    bz,
+    bx - halfW,
+    by + halfH,
+    bz,
     // top face (z = bz + height)
-    bx - halfW, by - halfH, bz + height,
-    bx + halfW, by - halfH, bz + height,
-    bx + halfW, by + halfH, bz + height,
-    bx - halfW, by + halfH, bz + height,
+    bx - halfW,
+    by - halfH,
+    bz + height,
+    bx + halfW,
+    by - halfH,
+    bz + height,
+    bx + halfW,
+    by + halfH,
+    bz + height,
+    bx - halfW,
+    by + halfH,
+    bz + height,
   ];
 
   // Use the 8 vertices with per-face indexing. Since SimpleMeshLayer
@@ -207,17 +238,17 @@ function buildChimneyBox(
   // pointing outward. Good enough for tiny chimney boxes.
   const indices = [
     // bottom
-    0, 2, 1,  0, 3, 2,
+    0, 2, 1, 0, 3, 2,
     // top
-    4, 5, 6,  4, 6, 7,
+    4, 5, 6, 4, 6, 7,
     // front (-Y)
-    0, 1, 5,  0, 5, 4,
+    0, 1, 5, 0, 5, 4,
     // back (+Y)
-    2, 3, 7,  2, 7, 6,
+    2, 3, 7, 2, 7, 6,
     // left (-X)
-    0, 4, 7,  0, 7, 3,
+    0, 4, 7, 0, 7, 3,
     // right (+X)
-    1, 2, 6,  1, 6, 5,
+    1, 2, 6, 1, 6, 5,
   ];
 
   // Simple vertex normals: average of adjacent faces ≈ pointing outward.
@@ -241,18 +272,28 @@ type MatchedDetection = {
   building: ParsedBuilding;
 };
 
-function matchDetections(
-  detections: Detection[],
-  buildings: ParsedBuilding[],
-): MatchedDetection[] {
+function matchDetections(detections: Detection[], buildings: ParsedBuilding[]): MatchedDetection[] {
   if (buildings.length === 0) return [];
   const matched: MatchedDetection[] = [];
   for (const det of detections) {
+    // Prefer the detection's own geo-bbox centroid. center_lat/center_lon is
+    // the BACKEND building centroid (shared across every detection on that
+    // backend building). When one backend building maps to multiple frontend
+    // CityJSON polygons, all detections would otherwise nail to a single
+    // polygon — and windows physically on neighboring polygons render off-mesh.
+    const detLat =
+      det.geo_ymin != null && det.geo_ymax != null
+        ? (det.geo_ymin + det.geo_ymax) / 2
+        : det.center_lat;
+    const detLng =
+      det.geo_xmin != null && det.geo_xmax != null
+        ? (det.geo_xmin + det.geo_xmax) / 2
+        : det.center_lon;
     let best: ParsedBuilding | null = null;
     let bestDist = Infinity;
     for (const b of buildings) {
-      const dLat = det.center_lat - b.lat;
-      const dLng = det.center_lon - b.lng;
+      const dLat = detLat - b.lat;
+      const dLng = detLng - b.lng;
       const d = dLat * dLat + dLng * dLng;
       if (d < bestDist) {
         bestDist = d;
@@ -267,15 +308,21 @@ function matchDetections(
 }
 
 /**
- * For each roof triangle, compute its centroid + normal. Used to distribute
- * detections across the roof surface — each detection gets the NEAREST roof
- * triangle centroid, which guarantees the panel always sits flat on a real
- * roof face (no wall placement, no floating).
+ * For each roof triangle we keep the three vertex XYs (for barycentric
+ * containment tests), the three Zs (for interpolating a landing height at
+ * the exact detection point), and the face normal.
+ *
+ * We use each triangle's own normal for panel orientation — this matches
+ * argile-web-ui's createRoofWindowOverlayMesh. Averaging normals across a
+ * cluster of "coplanar-ish" triangles was a wrong turn: it pulls the quad
+ * off the actual roof plane by up to the clustering tolerance.
  */
 type RoofFace = {
   cx: number;
   cy: number;
   cz: number;
+  xy: [number, number, number, number, number, number];
+  z: [number, number, number];
   normal: [number, number, number];
 };
 
@@ -289,11 +336,75 @@ function extractRoofFaces(b: ParsedBuilding): RoofFace[] {
       cx: (roof[base] + roof[base + 3] + roof[base + 6]) / 3,
       cy: (roof[base + 1] + roof[base + 4] + roof[base + 7]) / 3,
       cz: (roof[base + 2] + roof[base + 5] + roof[base + 8]) / 3,
+      xy: [
+        roof[base],
+        roof[base + 1],
+        roof[base + 3],
+        roof[base + 4],
+        roof[base + 6],
+        roof[base + 7],
+      ],
+      z: [roof[base + 2], roof[base + 5], roof[base + 8]],
       normal: triangleNormal(roof, base),
     });
   }
   return faces;
 }
+
+/**
+ * Find the first roof triangle whose XY projection contains (x,y) and
+ * return the interpolated elevation at that point. If none contains the
+ * point the detection will snap to the nearest face centroid.
+ *
+ * Matches argile-web-ui's findRoofSurfaceAt: first hit wins, tolerance
+ * loosened to 1e-2 so detections right on a triangle edge don't fall
+ * through to the nearest-face fallback.
+ */
+const BARYCENTRIC_EPS = 1e-2;
+
+function findFaceContaining(
+  faces: RoofFace[],
+  x: number,
+  y: number,
+): { faceIdx: number; z: number } | null {
+  for (let i = 0; i < faces.length; i++) {
+    const [ax, ay, bx, by, cx, cy] = faces[i].xy;
+    const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(denom) < 1e-9) continue;
+    const u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denom;
+    const v = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denom;
+    const w = 1 - u - v;
+    if (u < -BARYCENTRIC_EPS || v < -BARYCENTRIC_EPS || w < -BARYCENTRIC_EPS) continue;
+    const z = u * faces[i].z[0] + v * faces[i].z[1] + w * faces[i].z[2];
+    return { faceIdx: i, z };
+  }
+  return null;
+}
+
+function findNearestFace(faces: RoofFace[], x: number, y: number): number {
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < faces.length; i++) {
+    const dx = faces[i].cx - x;
+    const dy = faces[i].cy - y;
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function hasGeoBbox(
+  d: Detection,
+): d is Detection & { geo_xmin: number; geo_ymin: number; geo_xmax: number; geo_ymax: number } {
+  return d.geo_xmin != null && d.geo_ymin != null && d.geo_xmax != null && d.geo_ymax != null;
+}
+
+/** Minimum rendered half-dimensions in meters so very tight bboxes stay visible. */
+const MIN_HALF_W = 0.2;
+const MIN_HALF_H = 0.15;
 
 function buildDetectionMesh(
   matched: MatchedDetection[],
@@ -331,66 +442,141 @@ function buildDetectionMesh(
     const east = (b.lng - origin.lng) * mPerDegLng;
     const north = (b.lat - origin.lat) * mPerDegLat;
 
-    // Sort detections by score descending so highest-confidence gets the
-    // best roof face (most central).
+    // Meters-per-degree at THIS building's latitude (vs. the viewport origin
+    // used for the merged frame). For small viewports the difference is tiny,
+    // but using the building's latitude makes the geo→local conversion exact
+    // for each detection's own bbox.
+    const bLatRad = (b.lat * Math.PI) / 180;
+    const bMperDegLat = mPerDegLat;
+    const bMperDegLng = bMperDegLat * Math.cos(bLatRad);
+
+    // Sort detections by score descending — used by the per-building limits
+    // below (e.g. chimney cap) so the highest-confidence ones win.
     dets.sort((a, b) => b.score - a.score);
 
-    // Track used faces so multiple detections on the same building don't
-    // stack on the same triangle.
-    const usedFaces = new Set<number>();
+    // Greedy NMS on per-label detections: drop any whose geo-bbox center is
+    // within NMS_RADIUS_M of a higher-scored same-label detection on this
+    // building. SAM-3 frequently double-fires on a single roof window — each
+    // duplicate lands on a slightly different roof triangle, so the quads
+    // render at slightly different tilts and visibly "split" the panel.
+    const NMS_RADIUS_M = 0.8;
+    const kept: Detection[] = [];
+    const keptXY: Array<{ x: number; y: number; label: string }> = [];
+    const dropped: Array<{ label: string; score: number; nearestDist: number }> = [];
+    for (const det of dets) {
+      if (!hasGeoBbox(det)) {
+        kept.push(det);
+        continue;
+      }
+      const detLon = (det.geo_xmin + det.geo_xmax) / 2;
+      const detLat = (det.geo_ymin + det.geo_ymax) / 2;
+      const x = (detLon - b.lng) * bMperDegLng;
+      const y = (detLat - b.lat) * bMperDegLat;
+      let duplicate = false;
+      let minDist = Infinity;
+      for (const k of keptXY) {
+        if (k.label !== det.label) continue;
+        const dx = k.x - x;
+        const dy = k.y - y;
+        const d = Math.hypot(dx, dy);
+        if (d < minDist) minDist = d;
+        if (d < NMS_RADIUS_M) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (duplicate) {
+        dropped.push({ label: det.label, score: det.score, nearestDist: minDist });
+        continue;
+      }
+      kept.push(det);
+      keptXY.push({ x, y, label: det.label });
+    }
+    dets.length = 0;
+    dets.push(...kept);
+
     // Limit chimneys to 2 per building (highest confidence first, already
     // sorted). Most buildings have only 1-2 physical chimneys; the SAT
     // model tends to over-detect them.
     const MAX_CHIMNEYS_PER_BUILDING = 2;
     let chimneyCount = 0;
 
+    // Chimneys don't use the per-detection geo_* path: SAM-3's bbox around a
+    // chimney is noisy (often spanning the chimney's shadow on the roof) and
+    // the box is vertically extruded, so a bad bbox produces a wrong-sized
+    // box at the wrong height. We keep the old nearest-central-face heuristic
+    // with hardcoded chimney dimensions — visually identical to pre-geo_*.
+    const usedChimneyFaces = new Set<number>();
+
     for (const det of dets) {
       if (det.label === "chimney" && chimneyCount >= MAX_CHIMNEYS_PER_BUILDING) continue;
-      // Find the nearest UNUSED roof face centroid.
-      let bestIdx = -1;
-      let bestDist = Infinity;
-      for (let i = 0; i < faces.length; i++) {
-        if (usedFaces.has(i)) continue;
-        // Use distance from the building's roof centroid (center of all
-        // faces) as a preference metric — faces closer to center are
-        // preferred so panels sit in the middle of the roof.
-        const f = faces[i];
-        const dist = f.cx * f.cx + f.cy * f.cy; // distance from local (0,0)
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestIdx = i;
+
+      let localX: number;
+      let localY: number;
+      let halfW: number;
+      let halfH: number;
+      let face: RoofFace;
+
+      if (det.label === "chimney") {
+        // Old behavior: nearest unused central roof face, hardcoded 0.25m base.
+        let bestIdx = -1;
+        let bestDist = Infinity;
+        for (let i = 0; i < faces.length; i++) {
+          if (usedChimneyFaces.has(i)) continue;
+          const d = faces[i].cx * faces[i].cx + faces[i].cy * faces[i].cy;
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+          }
+        }
+        if (bestIdx < 0) bestIdx = 0;
+        usedChimneyFaces.add(bestIdx);
+        face = faces[bestIdx];
+        localX = face.cx;
+        localY = face.cy;
+        halfW = 0.25;
+        halfH = 0.25;
+      } else if (hasGeoBbox(det)) {
+        const detLon = (det.geo_xmin + det.geo_xmax) / 2;
+        const detLat = (det.geo_ymin + det.geo_ymax) / 2;
+        localX = (detLon - b.lng) * bMperDegLng;
+        localY = (detLat - b.lat) * bMperDegLat;
+        halfW = Math.max(MIN_HALF_W, ((det.geo_xmax - det.geo_xmin) * bMperDegLng) / 2);
+        halfH = Math.max(MIN_HALF_H, ((det.geo_ymax - det.geo_ymin) * bMperDegLat) / 2);
+
+        const hit = findFaceContaining(faces, localX, localY);
+        if (hit) {
+          face = faces[hit.faceIdx];
+          face = { ...face, cz: hit.z };
+        } else {
+          face = faces[findNearestFace(faces, localX, localY)];
+        }
+      } else {
+        // Flat panel with no geo bbox (legacy row): hardcoded defaults.
+        face = faces[findNearestFace(faces, 0, 0)];
+        localX = face.cx;
+        localY = face.cy;
+        if (det.label === "photovoltaic solar panel") {
+          halfW = 0.8;
+          halfH = 0.5;
+        } else {
+          halfW = 0.35;
+          halfH = 0.25;
         }
       }
-      // All faces used — reuse the first one (rare: more detections than
-      // roof triangles).
-      if (bestIdx < 0) bestIdx = 0;
-      usedFaces.add(bestIdx);
 
-      const face = faces[bestIdx];
-
-      const center: [number, number, number] = [
-        face.cx + east,
-        face.cy + north,
-        face.cz,
-      ];
+      const center: [number, number, number] = [localX + east, localY + north, face.cz];
 
       let mesh: MeshData;
       let vertCount: number;
       if (det.label === "chimney") {
-        // 3D box rising 0.6m from the roof — looks like a chimney stack.
-        mesh = buildChimneyBox(center, face.normal, 0.25, 0.25, 0.6);
+        mesh = buildChimneyBox(center, face.normal, halfW, halfH, 0.6);
         vertCount = 8;
-      } else if (det.label === "photovoltaic solar panel") {
-        // Flat dark rectangle ~1.6m × 1m — standard PV module size.
-        mesh = buildRoofQuad(center, face.normal, 0.8, 0.5);
-        vertCount = 4;
+        chimneyCount++;
       } else {
-        // Roof window: smaller flat rectangle ~0.7m × 0.5m.
-        mesh = buildRoofQuad(center, face.normal, 0.35, 0.25);
+        mesh = buildRoofQuad(center, face.normal, halfW, halfH);
         vertCount = 4;
       }
-
-      if (det.label === "chimney") chimneyCount++;
 
       for (const p of mesh.positions) allPos.push(p);
       for (const n of mesh.normals) allNrm.push(n);

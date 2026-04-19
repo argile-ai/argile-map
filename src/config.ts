@@ -14,10 +14,10 @@ export const config = {
   mapStyle: import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
 } as const;
 
-// 90 rue des Marguerites, Antony (92).
+// 21 Rue de l'Oppidum, 62000 Arras.
 export const INITIAL_VIEW = {
-  longitude: 2.2957,
-  latitude: 48.7582,
+  longitude: 2.742413,
+  latitude: 50.305751,
   zoom: 17,
   pitch: 60,
   bearing: -20,
