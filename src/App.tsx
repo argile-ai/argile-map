@@ -153,6 +153,9 @@ export function App() {
   const [camera, setCamera] = useState<{ lat: number; lng: number } | null>(null);
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
   const [bearing, setBearing] = useState<number>(INITIAL_VIEW.bearing);
+  const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.4);
+  const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const ROOF_WINDOW_MIN = 0.1;
 
   // Only feed bounds to the data layer once we're zoomed in enough AND
   // the map has settled. Below the threshold we show nothing rather than
@@ -261,10 +264,10 @@ export function App() {
       out.push(createBuildingLayer(meshes.body, origin));
       out.push(...createRoofMaterialLayers(meshes.roofs, origin));
     }
-    out.push(...createDetectionLayer(detections, parsed, origin));
+    out.push(...createDetectionLayer(detections, parsed, origin, { roofWindowMinScore }));
     out.push(...createTreeLayers(trees));
     return out;
-  }, [meshes, origin, detections, parsed, trees]);
+  }, [meshes, origin, detections, parsed, trees, roofWindowMinScore]);
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -287,43 +290,88 @@ export function App() {
           position: "absolute",
           bottom: 32,
           left: 12,
-          padding: "8px 12px",
           background: "rgba(20,20,30,0.85)",
           color: "white",
           borderRadius: 8,
           fontFamily: "system-ui, sans-serif",
           fontSize: 13,
-          pointerEvents: "none",
-          minWidth: 180,
+          minWidth: 200,
+          overflow: "hidden",
         }}
       >
-        <div>
+        <button
+          type="button"
+          onClick={() => setPanelOpen((o) => !o)}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
+            padding: "8px 12px",
+            background: "none",
+            border: "none",
+            color: "white",
+            cursor: "pointer",
+            fontSize: 13,
+            fontFamily: "inherit",
+          }}
+        >
           <strong>Argile Map</strong>
-        </div>
-        {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
-          <div style={{ opacity: 0.75 }}>
-            Zoomez pour charger les bâtiments 3D (z≥{MIN_ZOOM_FOR_BUILDINGS})
-          </div>
-        ) : (
-          <>
+          <span style={{ fontSize: 10, opacity: 0.75 }}>{panelOpen ? "▲" : "▼"}</span>
+        </button>
+        {panelOpen && (
+          <div style={{ padding: "0 12px 8px" }}>
             <div>
-              {parsed.length} / {buildings.length} bâtiments affichés
+              {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
+                <div style={{ opacity: 0.75 }}>
+                  Zoomez pour charger les bâtiments 3D (z≥{MIN_ZOOM_FOR_BUILDINGS})
+                </div>
+              ) : (
+                <>
+                  <div>
+                    {parsed.length} / {buildings.length} bâtiments affichés
+                  </div>
+                  <div>{detections.length} détections en vue</div>
+                  {trees.length > 0 && <div>{trees.length} arbres</div>}
+                  {materialCount > 0 && <div>{materialCount} toitures</div>}
+                  <div style={{ opacity: 0.75, marginTop: 2 }}>
+                    {status.status === "loading"
+                      ? "Chargement…"
+                      : status.status === "ready"
+                        ? "Chargé"
+                        : status.status === "error"
+                          ? "Erreur"
+                          : ""}
+                  </div>
+                </>
+              )}
+              {status.error && <div style={{ color: "#ff7979", marginTop: 4 }}>{status.error}</div>}
             </div>
-            <div>{detections.length} détections en vue</div>
-            {trees.length > 0 && <div>{trees.length} arbres</div>}
-            {materialCount > 0 && <div>{materialCount} toitures BDNB</div>}
-            <div style={{ opacity: 0.75, marginTop: 2 }}>
-              {status.status === "loading"
-                ? "Chargement…"
-                : status.status === "ready"
-                  ? "Chargé"
-                  : status.status === "error"
-                    ? "Erreur"
-                    : ""}
-            </div>
-          </>
+            <label
+              style={{
+                display: "block",
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(255,255,255,0.15)",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                <span>Seuil fenêtres de toit</span>
+                <span style={{ opacity: 0.75 }}>{roofWindowMinScore.toFixed(2)}</span>
+              </div>
+              <input
+                type="range"
+                min={ROOF_WINDOW_MIN}
+                max={1}
+                step={0.05}
+                value={roofWindowMinScore}
+                onChange={(e) => setRoofWindowMinScore(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+            </label>
+          </div>
         )}
-        {status.error && <div style={{ color: "#ff7979", marginTop: 4 }}>{status.error}</div>}
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ export function useViewportDetections(bounds: Bounds | null): Detection[] {
       queryClient
         .fetchQuery({
           queryKey: ["detections", boundsKey(bounds)],
-          queryFn: ({ signal }) => searchDetectionsByBounds({ bounds, minScore: 0.4, signal }),
+          queryFn: ({ signal }) => searchDetectionsByBounds({ bounds, minScore: 0.1, signal }),
           staleTime: 1000 * 60 * 5,
         })
         .then((rows) => {
