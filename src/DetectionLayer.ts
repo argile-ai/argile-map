@@ -297,14 +297,12 @@ function matchDetections(detections: Detection[], buildings: ParsedBuilding[]): 
 /**
  * For each roof triangle we keep the three vertex XYs (for barycentric
  * containment tests), the three Zs (for interpolating a landing height at
- * the exact detection point), the face normal, and a `slopeNormal` — the
- * cluster-canonical normal of the roof slope this triangle belongs to.
+ * the exact detection point), and the face normal.
  *
- * The slope cluster exists so that coplanar-ish triangles (LOD2 meshes
- * frequently split one physical slope into several triangles whose normals
- * differ by tiny floating-point noise) all share a single orientation for
- * the panel that lands on them. Without this, two detections on the same
- * physical roof slope can render at visibly different tilts.
+ * We use each triangle's own normal for panel orientation — this matches
+ * argile-web-ui's createRoofWindowOverlayMesh. Averaging normals across a
+ * cluster of "coplanar-ish" triangles was a wrong turn: it pulls the quad
+ * off the actual roof plane by up to the clustering tolerance.
  */
 type RoofFace = {
   cx: number;
@@ -313,89 +311,11 @@ type RoofFace = {
   xy: [number, number, number, number, number, number];
   z: [number, number, number];
   normal: [number, number, number];
-  slopeNormal: [number, number, number];
-  area: number;
 };
-
-/** Area of a triangle given the 9-float vertex block. */
-function triangleArea(roof: Float32Array, base: number): number {
-  const e1x = roof[base + 3] - roof[base];
-  const e1y = roof[base + 4] - roof[base + 1];
-  const e1z = roof[base + 5] - roof[base + 2];
-  const e2x = roof[base + 6] - roof[base];
-  const e2y = roof[base + 7] - roof[base + 1];
-  const e2z = roof[base + 8] - roof[base + 2];
-  const cx = e1y * e2z - e1z * e2y;
-  const cy = e1z * e2x - e1x * e2z;
-  const cz = e1x * e2y - e1y * e2x;
-  return 0.5 * Math.hypot(cx, cy, cz);
-}
-
-/**
- * Group triangles whose normals are within ~10° of each other into a single
- * "slope". Each group's canonical normal is the area-weighted mean of the
- * member normals (then renormalized). Returns an array parallel to `faces`
- * giving the group-canonical normal for each face.
- *
- * Greedy first-match grouping — not a proper clustering algorithm, but
- * good enough for typical LOD2 roofs (a few large coplanar groups).
- */
-function computeSlopeNormals(
-  normals: [number, number, number][],
-  areas: number[],
-): [number, number, number][] {
-  const COS_THRESHOLD = Math.cos((10 * Math.PI) / 180);
-  const groups: { mean: [number, number, number]; area: number }[] = [];
-  const groupIdx = new Int32Array(normals.length);
-
-  for (let i = 0; i < normals.length; i++) {
-    const n = normals[i];
-    let matched = -1;
-    for (let g = 0; g < groups.length; g++) {
-      const m = groups[g].mean;
-      const dot = m[0] * n[0] + m[1] * n[1] + m[2] * n[2];
-      if (dot > COS_THRESHOLD) {
-        matched = g;
-        break;
-      }
-    }
-    if (matched >= 0) {
-      const gr = groups[matched];
-      const a = areas[i];
-      const totalA = gr.area + a;
-      gr.mean[0] = (gr.mean[0] * gr.area + n[0] * a) / totalA;
-      gr.mean[1] = (gr.mean[1] * gr.area + n[1] * a) / totalA;
-      gr.mean[2] = (gr.mean[2] * gr.area + n[2] * a) / totalA;
-      const len = Math.hypot(gr.mean[0], gr.mean[1], gr.mean[2]) || 1;
-      gr.mean[0] /= len;
-      gr.mean[1] /= len;
-      gr.mean[2] /= len;
-      gr.area = totalA;
-      groupIdx[i] = matched;
-    } else {
-      groups.push({ mean: [n[0], n[1], n[2]], area: areas[i] });
-      groupIdx[i] = groups.length - 1;
-    }
-  }
-
-  return normals.map((_, i) => {
-    const m = groups[groupIdx[i]].mean;
-    return [m[0], m[1], m[2]];
-  });
-}
 
 function extractRoofFaces(b: ParsedBuilding): RoofFace[] {
   const roof = extractRoofPositions(b);
   const triCount = roof.length / 9;
-  const normals: [number, number, number][] = [];
-  const areas: number[] = [];
-  for (let t = 0; t < triCount; t++) {
-    const base = t * 9;
-    normals.push(triangleNormal(roof, base));
-    areas.push(triangleArea(roof, base));
-  }
-  const slopeNormals = computeSlopeNormals(normals, areas);
-
   const faces: RoofFace[] = [];
   for (let t = 0; t < triCount; t++) {
     const base = t * 9;
@@ -412,30 +332,28 @@ function extractRoofFaces(b: ParsedBuilding): RoofFace[] {
         roof[base + 7],
       ],
       z: [roof[base + 2], roof[base + 5], roof[base + 8]],
-      normal: normals[t],
-      slopeNormal: slopeNormals[t],
-      area: areas[t],
+      normal: triangleNormal(roof, base),
     });
   }
   return faces;
 }
 
 /**
- * Find the roof triangle whose XY projection contains (x,y), and return the
- * interpolated elevation at that point. If none contains the point — the
- * detection bbox might straddle a gutter or the roof mesh is incomplete —
- * return null and let the caller pick a fallback.
+ * Find the first roof triangle whose XY projection contains (x,y) and
+ * return the interpolated elevation at that point. If none contains the
+ * point the detection will snap to the nearest face centroid.
  *
- * When multiple triangles contain the point (overlapping LOD2 roof parts),
- * we pick the highest one so detections land on the topmost surface.
+ * Matches argile-web-ui's findRoofSurfaceAt: first hit wins, tolerance
+ * loosened to 1e-2 so detections right on a triangle edge don't fall
+ * through to the nearest-face fallback.
  */
+const BARYCENTRIC_EPS = 1e-2;
+
 function findFaceContaining(
   faces: RoofFace[],
   x: number,
   y: number,
 ): { faceIdx: number; z: number } | null {
-  let bestIdx = -1;
-  let bestZ = -Infinity;
   for (let i = 0; i < faces.length; i++) {
     const [ax, ay, bx, by, cx, cy] = faces[i].xy;
     const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
@@ -443,14 +361,11 @@ function findFaceContaining(
     const u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denom;
     const v = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denom;
     const w = 1 - u - v;
-    if (u < -1e-4 || v < -1e-4 || w < -1e-4) continue;
+    if (u < -BARYCENTRIC_EPS || v < -BARYCENTRIC_EPS || w < -BARYCENTRIC_EPS) continue;
     const z = u * faces[i].z[0] + v * faces[i].z[1] + w * faces[i].z[2];
-    if (z > bestZ) {
-      bestZ = z;
-      bestIdx = i;
-    }
+    return { faceIdx: i, z };
   }
-  return bestIdx < 0 ? null : { faceIdx: bestIdx, z: bestZ };
+  return null;
 }
 
 function findNearestFace(faces: RoofFace[], x: number, y: number): number {
@@ -614,9 +529,7 @@ function buildDetectionMesh(
         vertCount = 8;
         chimneyCount++;
       } else {
-        // Orient flat panels by the cluster-canonical slope normal so every
-        // panel on the same roof slope lies parallel to its neighbors.
-        mesh = buildRoofQuad(center, face.slopeNormal, halfW, halfH);
+        mesh = buildRoofQuad(center, face.normal, halfW, halfH);
         vertCount = 4;
       }
 
