@@ -441,6 +441,40 @@ function buildDetectionMesh(
     // below (e.g. chimney cap) so the highest-confidence ones win.
     dets.sort((a, b) => b.score - a.score);
 
+    // Greedy NMS on per-label detections: drop any whose geo-bbox center is
+    // within NMS_RADIUS_M of a higher-scored same-label detection on this
+    // building. SAM-3 frequently double-fires on a single roof window — each
+    // duplicate lands on a slightly different roof triangle, so the quads
+    // render at slightly different tilts and visibly "split" the panel.
+    const NMS_RADIUS_M = 0.8;
+    const kept: Detection[] = [];
+    const keptXY: Array<{ x: number; y: number; label: string }> = [];
+    for (const det of dets) {
+      if (!hasGeoBbox(det)) {
+        kept.push(det);
+        continue;
+      }
+      const detLon = (det.geo_xmin + det.geo_xmax) / 2;
+      const detLat = (det.geo_ymin + det.geo_ymax) / 2;
+      const x = (detLon - b.lng) * bMperDegLng;
+      const y = (detLat - b.lat) * bMperDegLat;
+      let duplicate = false;
+      for (const k of keptXY) {
+        if (k.label !== det.label) continue;
+        const dx = k.x - x;
+        const dy = k.y - y;
+        if (dx * dx + dy * dy < NMS_RADIUS_M * NMS_RADIUS_M) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (duplicate) continue;
+      kept.push(det);
+      keptXY.push({ x, y, label: det.label });
+    }
+    dets.length = 0;
+    dets.push(...kept);
+
     // Limit chimneys to 2 per building (highest confidence first, already
     // sorted). Most buildings have only 1-2 physical chimneys; the SAT
     // model tends to over-detect them.
