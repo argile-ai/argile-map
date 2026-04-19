@@ -153,7 +153,7 @@ export function App() {
   const [camera, setCamera] = useState<{ lat: number; lng: number } | null>(null);
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
   const [bearing, setBearing] = useState<number>(INITIAL_VIEW.bearing);
-  const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.4);
+  const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.5);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const ROOF_WINDOW_MIN = 0.1;
 
