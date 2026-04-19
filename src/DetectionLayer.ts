@@ -449,6 +449,7 @@ function buildDetectionMesh(
     const NMS_RADIUS_M = 0.8;
     const kept: Detection[] = [];
     const keptXY: Array<{ x: number; y: number; label: string }> = [];
+    const dropped: Array<{ label: string; score: number; nearestDist: number }> = [];
     for (const det of dets) {
       if (!hasGeoBbox(det)) {
         kept.push(det);
@@ -459,18 +460,35 @@ function buildDetectionMesh(
       const x = (detLon - b.lng) * bMperDegLng;
       const y = (detLat - b.lat) * bMperDegLat;
       let duplicate = false;
+      let minDist = Infinity;
       for (const k of keptXY) {
         if (k.label !== det.label) continue;
         const dx = k.x - x;
         const dy = k.y - y;
-        if (dx * dx + dy * dy < NMS_RADIUS_M * NMS_RADIUS_M) {
+        const d = Math.hypot(dx, dy);
+        if (d < minDist) minDist = d;
+        if (d < NMS_RADIUS_M) {
           duplicate = true;
           break;
         }
       }
-      if (duplicate) continue;
+      if (duplicate) {
+        dropped.push({ label: det.label, score: det.score, nearestDist: minDist });
+        continue;
+      }
       kept.push(det);
       keptXY.push({ x, y, label: det.label });
+    }
+    if (kept.some((d) => d.label === "roof window")) {
+      const rw = kept.filter((d) => d.label === "roof window");
+      console.log("[nms]", {
+        bldg: b.geopf_id,
+        totalIn: dets.length,
+        kept: kept.length,
+        roofWindowsKept: rw.length,
+        dropped: dropped.length,
+        droppedDetails: dropped,
+      });
     }
     dets.length = 0;
     dets.push(...kept);
@@ -517,11 +535,6 @@ function buildDetectionMesh(
         halfW = 0.25;
         halfH = 0.25;
       } else if (hasGeoBbox(det)) {
-        // Flat panels (roof windows, PV): use the per-detection geo bbox.
-        // Position is the bbox centroid in the building's local meter frame,
-        // size is derived from bbox dimensions, orientation is the slope's
-        // canonical normal (not the individual triangle's) so coplanar-ish
-        // triangles share a single tilt.
         const detLon = (det.geo_xmin + det.geo_xmax) / 2;
         const detLat = (det.geo_ymin + det.geo_ymax) / 2;
         localX = (detLon - b.lng) * bMperDegLng;
@@ -532,13 +545,22 @@ function buildDetectionMesh(
         const hit = findFaceContaining(faces, localX, localY);
         if (hit) {
           face = faces[hit.faceIdx];
-          // Use the interpolated elevation at (localX, localY), not the
-          // triangle centroid's — panels on sloped roofs otherwise sit off
-          // the surface.
           face = { ...face, cz: hit.z };
         } else {
-          // Off-mesh: snap to nearest face centroid so we don't render mid-air.
           face = faces[findNearestFace(faces, localX, localY)];
+        }
+
+        if (det.label === "roof window") {
+          console.log("[roof-window]", {
+            bldg: b.geopf_id,
+            score: det.score.toFixed(3),
+            local: [localX.toFixed(2), localY.toFixed(2), face.cz.toFixed(2)],
+            halfWH: [halfW.toFixed(2), halfH.toFixed(2)],
+            faceIdx: hit ? hit.faceIdx : `nearest:${findNearestFace(faces, localX, localY)}`,
+            hit: !!hit,
+            normal: face.normal.map((v) => v.toFixed(3)),
+            totalFaces: faces.length,
+          });
         }
       } else {
         // Flat panel with no geo bbox (legacy row): hardcoded defaults.
