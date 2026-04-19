@@ -299,6 +299,7 @@ export function App() {
           bottom: 32,
           left: 12,
           fontFamily: "'Lexend', system-ui, sans-serif",
+          fontWeight: 300,
           fontSize: 13,
           minWidth: 200,
         }}
@@ -308,8 +309,8 @@ export function App() {
           onClick={() => setPanelOpen((o) => !o)}
           style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            gap: 6,
             width: "100%",
             padding: "8px 12px",
             background: "rgba(20,20,30,0.85)",
@@ -321,8 +322,11 @@ export function App() {
             fontFamily: "inherit",
           }}
         >
+          <span style={{ fontSize: 16 }}>&#x2699;&#xfe0f;</span>
           <span>Paramètres</span>
-          <span style={{ fontSize: 10, opacity: 0.75 }}>{panelOpen ? "▲" : "▼"}</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, opacity: 0.75 }}>
+            {panelOpen ? "▲" : "▼"}
+          </span>
         </button>
         {panelOpen && (
           <div
