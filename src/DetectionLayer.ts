@@ -406,17 +406,6 @@ function hasGeoBbox(
 const MIN_HALF_W = 0.2;
 const MIN_HALF_H = 0.15;
 
-type DebugEntry = {
-  bldg: string;
-  score: number;
-  local: [number, number, number];
-  halfWH: [number, number];
-  normal: [number, number, number];
-  faceIdx: number | string;
-  hit: boolean;
-  geo: [number, number];
-};
-
 function buildDetectionMesh(
   matched: MatchedDetection[],
   origin: { lat: number; lng: number },
@@ -430,7 +419,6 @@ function buildDetectionMesh(
   const allNrm: number[] = [];
   const allIdx: number[] = [];
   let vOffset = 0;
-  const debugRoofWindows: DebugEntry[] = [];
 
   // Group detections by building.
   const byBuilding = new Map<string, { building: ParsedBuilding; detections: Detection[] }>();
@@ -563,19 +551,6 @@ function buildDetectionMesh(
         } else {
           face = faces[findNearestFace(faces, localX, localY)];
         }
-
-        if (det.label === "roof window") {
-          debugRoofWindows.push({
-            bldg: b.geopf_id,
-            score: det.score,
-            local: [localX, localY, face.cz],
-            halfWH: [halfW, halfH],
-            normal: [face.normal[0], face.normal[1], face.normal[2]],
-            faceIdx: hit ? hit.faceIdx : `nearest:${findNearestFace(faces, localX, localY)}`,
-            hit: !!hit,
-            geo: [detLon, detLat],
-          });
-        }
       } else {
         // Flat panel with no geo bbox (legacy row): hardcoded defaults.
         face = faces[findNearestFace(faces, 0, 0)];
@@ -608,35 +583,6 @@ function buildDetectionMesh(
       for (const idx of mesh.indices) allIdx.push(idx + vOffset);
       vOffset += vertCount;
     }
-  }
-
-  if (debugRoofWindows.length > 0) {
-    const byBuildingSummary: Record<string, number> = {};
-    for (const e of debugRoofWindows) {
-      byBuildingSummary[e.bldg] = (byBuildingSummary[e.bldg] ?? 0) + 1;
-    }
-    console.log(
-      `[roof-windows] total=${debugRoofWindows.length} buildings=${Object.keys(byBuildingSummary).length}`,
-      byBuildingSummary,
-    );
-    console.table(
-      debugRoofWindows.map((e) => ({
-        bldg: e.bldg,
-        score: e.score.toFixed(3),
-        geo_lng: e.geo[0].toFixed(6),
-        geo_lat: e.geo[1].toFixed(6),
-        local_x: e.local[0].toFixed(2),
-        local_y: e.local[1].toFixed(2),
-        local_z: e.local[2].toFixed(2),
-        halfW: e.halfWH[0].toFixed(2),
-        halfH: e.halfWH[1].toFixed(2),
-        n_x: e.normal[0].toFixed(3),
-        n_y: e.normal[1].toFixed(3),
-        n_z: e.normal[2].toFixed(3),
-        face: e.faceIdx,
-        hit: e.hit,
-      })),
-    );
   }
 
   return {
