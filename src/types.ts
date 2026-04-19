@@ -76,6 +76,27 @@ export type DetectionSearchResponse = {
 };
 
 /**
+ * A tree extracted from the IGN LIDAR HD nationwide point cloud by
+ * `trees/extract/worker.py`, served via `/trees/search`. Matches
+ * `trees/serve/schemas.py::TreeOut`.
+ */
+export type Tree = {
+  tree_id: string;
+  lat: number;
+  lng: number;
+  height_m: number;
+  crown_diameter_m: number;
+  crown_area_m2: number;
+  n_points: number;
+  is_conifer: boolean;
+};
+
+export type TreeSearchResponse = {
+  count: number;
+  trees: Tree[];
+};
+
+/**
  * One row of the `/bdnb/complet/bbox` response from argeme. The full schema
  * has 60+ fields (drop-in replacement for api.bdnb.io) — we only type the
  * ones we actually read. Everything else stays on the wire but is ignored.

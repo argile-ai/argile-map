@@ -14,11 +14,11 @@ import { RiskLayerPanel } from "./RiskLayerPanel";
 import { classifyRoofMaterial, type RoofMaterial } from "./roofMaterials";
 import { createTreeLayers } from "./TreeLayer";
 import type { CityJsonBuilding } from "./types";
-import { useTreeData } from "./useTreeData";
 import { useViewportBdnb } from "./useViewportBdnb";
 import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
 import { useViewportStatus } from "./useViewportStatus";
+import { useViewportTrees } from "./useViewportTrees";
 import { parseBuildingAsync } from "./workers/parsePool";
 
 /**
@@ -164,7 +164,7 @@ export function App() {
   const origin = useFrozenOrigin(camera);
   const status = useViewportStatus();
   const detections = useViewportDetections(activeBounds);
-  const trees = useTreeData();
+  const trees = useViewportTrees(activeBounds);
   const bdnb = useViewportBdnb(activeBounds);
 
   /**
