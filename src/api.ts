@@ -5,6 +5,8 @@ import type {
   CityJsonSearchResponse,
   Detection,
   DetectionSearchResponse,
+  Tree,
+  TreeSearchResponse,
 } from "./types";
 
 /**
@@ -123,4 +125,47 @@ export async function searchBdnbComplet(params: {
     throw new Error(`argeme /bdnb/complet/bbox ${response.status}`);
   }
   return (await response.json()) as BdnbCompletRow[];
+}
+
+/**
+ * Search trees extracted from IGN LIDAR HD inside the current viewport.
+ * Routed through Traefik's `/trees` stripprefix → trees-api `/search`.
+ */
+export async function searchTreesInBounds(params: {
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  minHeight?: number;
+  isConifer?: boolean;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<Tree[]> {
+  const { bounds, minHeight = 3, isConifer, limit = 5000, signal } = params;
+  const polygon = {
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [bounds.minLng, bounds.minLat],
+        [bounds.maxLng, bounds.minLat],
+        [bounds.maxLng, bounds.maxLat],
+        [bounds.minLng, bounds.maxLat],
+        [bounds.minLng, bounds.minLat],
+      ],
+    ],
+  };
+  const response = await fetch(`${config.apiUrl}/trees/search`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      geometry: polygon,
+      crs: "EPSG:4326",
+      min_height_m: minHeight,
+      is_conifer: isConifer,
+      limit,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Argile API /trees/search ${response.status}`);
+  }
+  const data = (await response.json()) as TreeSearchResponse;
+  return data.trees;
 }
