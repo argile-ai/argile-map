@@ -414,10 +414,17 @@ export function createDetectionLayer(
   detections: Detection[],
   buildings: ParsedBuilding[],
   origin: { lat: number; lng: number } | null,
+  opts?: { roofWindowMinScore?: number },
 ): SimpleMeshLayer<InstanceDatum>[] {
   if (detections.length === 0 || buildings.length === 0 || !origin) return [];
 
-  const matched = matchDetections(detections, buildings);
+  const roofWindowMinScore = opts?.roofWindowMinScore ?? 0;
+  const filtered =
+    roofWindowMinScore > 0
+      ? detections.filter((d) => d.label !== "roof window" || d.score >= roofWindowMinScore)
+      : detections;
+
+  const matched = matchDetections(filtered, buildings);
   if (matched.length === 0) return [];
 
   const layers: SimpleMeshLayer<InstanceDatum>[] = [];
