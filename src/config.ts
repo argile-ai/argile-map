@@ -14,10 +14,10 @@ export const config = {
   mapStyle: import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
 } as const;
 
-// 10 Rue du 26 Août 1944, 94360 Bry-sur-Marne.
+// 21 Rue de l'Oppidum, 62000 Arras.
 export const INITIAL_VIEW = {
-  longitude: 2.516611,
-  latitude: 48.850229,
+  longitude: 2.742413,
+  latitude: 50.305751,
   zoom: 18.5,
   pitch: 60,
   bearing: -20,
