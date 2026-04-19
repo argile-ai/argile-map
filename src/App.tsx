@@ -154,8 +154,11 @@ export function App() {
   const [zoom, setZoom] = useState<number>(INITIAL_VIEW.zoom);
   const [bearing, setBearing] = useState<number>(INITIAL_VIEW.bearing);
   const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.5);
+  const [treeMinHeight, setTreeMinHeight] = useState<number>(2.5);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const ROOF_WINDOW_MIN = 0.1;
+  const TREE_HEIGHT_MIN = 2.5;
+  const TREE_HEIGHT_MAX = 30;
 
   // Only feed bounds to the data layer once we're zoomed in enough AND
   // the map has settled. Below the threshold we show nothing rather than
@@ -265,9 +268,14 @@ export function App() {
       out.push(...createRoofMaterialLayers(meshes.roofs, origin));
     }
     out.push(...createDetectionLayer(detections, parsed, origin, { roofWindowMinScore }));
-    out.push(...createTreeLayers(trees));
+    out.push(...createTreeLayers(trees, { minHeight: treeMinHeight }));
     return out;
-  }, [meshes, origin, detections, parsed, trees, roofWindowMinScore]);
+  }, [meshes, origin, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
+
+  const treesDisplayed = useMemo(
+    () => trees.filter((t) => t.height_m >= treeMinHeight).length,
+    [trees, treeMinHeight],
+  );
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -290,13 +298,9 @@ export function App() {
           position: "absolute",
           bottom: 32,
           left: 12,
-          background: "rgba(20,20,30,0.85)",
-          color: "white",
-          borderRadius: 8,
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: "'Lexend', system-ui, sans-serif",
           fontSize: 13,
           minWidth: 200,
-          overflow: "hidden",
         }}
       >
         <button
@@ -308,19 +312,28 @@ export function App() {
             alignItems: "center",
             width: "100%",
             padding: "8px 12px",
-            background: "none",
+            background: "rgba(20,20,30,0.85)",
             border: "none",
+            borderRadius: 10,
             color: "white",
             cursor: "pointer",
             fontSize: 13,
             fontFamily: "inherit",
           }}
         >
-          <strong>Argile Map</strong>
+          <span>Paramètres</span>
           <span style={{ fontSize: 10, opacity: 0.75 }}>{panelOpen ? "▲" : "▼"}</span>
         </button>
         {panelOpen && (
-          <div style={{ padding: "0 12px 8px" }}>
+          <div
+            style={{
+              marginTop: 4,
+              padding: "8px 10px",
+              background: "rgba(20,20,30,0.90)",
+              color: "white",
+              borderRadius: 10,
+            }}
+          >
             <div>
               {zoom < MIN_ZOOM_FOR_BUILDINGS ? (
                 <div style={{ opacity: 0.75 }}>
@@ -332,7 +345,11 @@ export function App() {
                     {parsed.length} / {buildings.length} bâtiments affichés
                   </div>
                   <div>{detections.length} détections en vue</div>
-                  {trees.length > 0 && <div>{trees.length} arbres</div>}
+                  {trees.length > 0 && (
+                    <div>
+                      {treesDisplayed} / {trees.length} arbres
+                    </div>
+                  )}
                   {materialCount > 0 && <div>{materialCount} toitures</div>}
                   <div style={{ opacity: 0.75, marginTop: 2 }}>
                     {status.status === "loading"
@@ -367,6 +384,29 @@ export function App() {
                 step={0.05}
                 value={roofWindowMinScore}
                 onChange={(e) => setRoofWindowMinScore(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <label
+              style={{
+                display: "block",
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(255,255,255,0.15)",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                <span>Hauteur min. des arbres</span>
+                <span style={{ opacity: 0.75 }}>{treeMinHeight.toFixed(1)} m</span>
+              </div>
+              <input
+                type="range"
+                min={TREE_HEIGHT_MIN}
+                max={TREE_HEIGHT_MAX}
+                step={0.5}
+                value={treeMinHeight}
+                onChange={(e) => setTreeMinHeight(Number(e.target.value))}
                 style={{ width: "100%" }}
               />
             </label>
