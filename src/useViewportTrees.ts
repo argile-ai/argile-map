@@ -11,7 +11,6 @@ import type { TreeFeature } from "./TreeLayer";
 import type { Bounds } from "./useViewportBuildings";
 
 const DEBOUNCE_MS = 300;
-const MIN_HEIGHT_M = 3;
 
 function boundsKey(b: Bounds): string {
   const r = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -31,8 +30,7 @@ export function useViewportTrees(bounds: Bounds | null): TreeFeature[] {
       queryClient
         .fetchQuery({
           queryKey: ["trees", boundsKey(bounds)],
-          queryFn: ({ signal }) =>
-            searchTreesInBounds({ bounds, minHeight: MIN_HEIGHT_M, limit: 5000, signal }),
+          queryFn: ({ signal }) => searchTreesInBounds({ bounds, limit: 5000, signal }),
           staleTime: 1000 * 60 * 5,
         })
         .then((rows) => {

@@ -138,7 +138,7 @@ export async function searchTreesInBounds(params: {
   limit?: number;
   signal?: AbortSignal;
 }): Promise<Tree[]> {
-  const { bounds, minHeight = 3, isConifer, limit = 5000, signal } = params;
+  const { bounds, minHeight = 0, isConifer, limit = 5000, signal } = params;
   const polygon = {
     type: "Polygon" as const,
     coordinates: [

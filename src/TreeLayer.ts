@@ -142,9 +142,13 @@ const MIN_DISPLAY_CROWN_DIAMETER = 1.5;
 
 export function createTreeLayers(
   trees: TreeFeature[],
+  options: { minHeight?: number } = {},
   // biome-ignore lint/suspicious/noExplicitAny: SimpleMeshLayer generics
 ): any[] {
-  const filtered = trees.filter((t) => t.crown_diameter_m >= MIN_DISPLAY_CROWN_DIAMETER);
+  const minHeight = options.minHeight ?? 0;
+  const filtered = trees.filter(
+    (t) => t.crown_diameter_m >= MIN_DISPLAY_CROWN_DIAMETER && t.height_m >= minHeight,
+  );
   if (filtered.length === 0) return [];
   const trees_ = filtered;
 
