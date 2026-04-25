@@ -165,12 +165,12 @@ export function App() {
   // hammering the backend with dozens of tile fetches.
   const activeBounds = zoom >= MIN_ZOOM_FOR_BUILDINGS ? bounds : null;
 
-  const buildings = useViewportBuildings(activeBounds);
+  const buildings = useViewportBuildings(activeBounds, zoom);
   const parsed = useParsedBuildings(buildings);
   const origin = useFrozenOrigin(camera);
   const status = useViewportStatus();
   const detections = useViewportDetections(activeBounds);
-  const trees = useViewportTrees(activeBounds);
+  const trees = useViewportTrees(activeBounds, zoom);
   const bdnb = useViewportBdnb(activeBounds);
 
   /**
