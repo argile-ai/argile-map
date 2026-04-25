@@ -10,6 +10,15 @@ import "./index.css";
  */
 const App = lazy(() => import("./App").then((m) => ({ default: m.App })));
 
+// Register the API-cache service worker. Only in prod — the SW lifecycle
+// fights with Vite's HMR in dev, and revisits matter most for real users
+// not local development. See public/sw.js for the strategy.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker
+    .register("/sw.js")
+    .catch((err) => console.warn("SW registration failed", err));
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("#root not found");
 
