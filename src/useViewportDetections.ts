@@ -11,17 +11,29 @@ import { useEffect, useState } from "react";
 import { searchDetectionsByBounds } from "./api";
 import { queryClient } from "./collections";
 import type { Detection } from "./types";
-import type { Bounds } from "./useViewportBuildings";
+import { areaKm2, type Bounds, snapBounds, snapCell } from "./useViewportBuildings";
 
 const DEBOUNCE_MS = 300;
 
+/**
+ * Detections in dense urban areas (Marseille, Paris) easily exceed 10 000
+ * per pan, blowing up to ~4 MB of JSON. Cap by viewport area so the
+ * payload scales with what's actually visible. Hard cap at 3 000 — beyond
+ * that the dots overlap on screen anyway.
+ */
+const DETECTIONS_HARD_CAP = 3_000;
+const DETECTIONS_PER_KM2 = 3_000;
+
 function boundsKey(b: Bounds): string {
-  // Round to ~10m so small pans don't invalidate the cache unnecessarily.
-  const r = (n: number) => Math.round(n * 1e4) / 1e4;
+  // Bounds are pre-snapped, so a fixed precision is enough to disambiguate.
+  const r = (n: number) => n.toFixed(5);
   return `${r(b.minLat)}|${r(b.maxLat)}|${r(b.minLng)}|${r(b.maxLng)}`;
 }
 
-export function useViewportDetections(bounds: Bounds | null): Detection[] {
+export function useViewportDetections(
+  bounds: Bounds | null,
+  zoom = 17,
+): Detection[] {
   const [detections, setDetections] = useState<Detection[]>([]);
 
   useEffect(() => {
@@ -30,11 +42,17 @@ export function useViewportDetections(bounds: Bounds | null): Detection[] {
       return;
     }
     let cancelled = false;
+    const snapped = snapBounds(bounds, snapCell(zoom));
+    const limit = Math.min(
+      DETECTIONS_HARD_CAP,
+      Math.ceil(areaKm2(snapped) * DETECTIONS_PER_KM2),
+    );
     const timer = setTimeout(() => {
       queryClient
         .fetchQuery({
-          queryKey: ["detections", boundsKey(bounds)],
-          queryFn: ({ signal }) => searchDetectionsByBounds({ bounds, minScore: 0.1, signal }),
+          queryKey: ["detections", boundsKey(snapped), limit],
+          queryFn: ({ signal }) =>
+            searchDetectionsByBounds({ bounds: snapped, minScore: 0.1, limit, signal }),
           staleTime: 1000 * 60 * 5,
         })
         .then((rows) => {
@@ -51,7 +69,7 @@ export function useViewportDetections(bounds: Bounds | null): Detection[] {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [bounds]);
+  }, [bounds, zoom]);
 
   return detections;
 }

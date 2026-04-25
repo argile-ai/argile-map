@@ -169,9 +169,9 @@ export function App() {
   const parsed = useParsedBuildings(buildings);
   const origin = useFrozenOrigin(camera);
   const status = useViewportStatus();
-  const detections = useViewportDetections(activeBounds);
+  const detections = useViewportDetections(activeBounds, zoom);
   const trees = useViewportTrees(activeBounds, zoom);
-  const bdnb = useViewportBdnb(activeBounds);
+  const bdnb = useViewportBdnb(activeBounds, zoom);
 
   /**
    * `onMoveEnd` fires once per drag (when the user releases) instead of

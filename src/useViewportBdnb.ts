@@ -17,12 +17,21 @@ import { useEffect, useMemo } from "react";
 import { searchBdnbComplet } from "./api";
 import { bdnbCompletCollection, queryClient, setViewportBdnbComplet } from "./collections";
 import type { BdnbCompletRow } from "./types";
-import type { Bounds } from "./useViewportBuildings";
+import { areaKm2, type Bounds, snapBounds, snapCell } from "./useViewportBuildings";
 
 const DEBOUNCE_MS = 300;
 
+/**
+ * BDNB rows are *fat* — 60+ fields each, ~3 KB per row. A Marseille
+ * pan unbounded by area returns ~4 000 rows = 11 MB. Cap aggressively:
+ * the map only really uses the rows the user clicks on (point-in-polygon
+ * lookup is just to find the row for the clicked building).
+ */
+const BDNB_HARD_CAP = 1_500;
+const BDNB_PER_KM2 = 1_500;
+
 function boundsKey(b: Bounds): string {
-  const r = (n: number) => Math.round(n * 1e4) / 1e4;
+  const r = (n: number) => n.toFixed(5);
   return `${r(b.minLat)}|${r(b.maxLat)}|${r(b.minLng)}|${r(b.maxLng)}`;
 }
 
@@ -96,7 +105,7 @@ function pointInRing(x: number, y: number, ring: readonly (readonly number[])[])
   return inside;
 }
 
-export function useViewportBdnb(bounds: Bounds | null): BdnbLookup {
+export function useViewportBdnb(bounds: Bounds | null, zoom = 17): BdnbLookup {
   useEffect(() => {
     if (!bounds) {
       setViewportBdnbComplet([]);
@@ -104,11 +113,13 @@ export function useViewportBdnb(bounds: Bounds | null): BdnbLookup {
     }
 
     let cancelled = false;
+    const snapped = snapBounds(bounds, snapCell(zoom));
+    const limit = Math.min(BDNB_HARD_CAP, Math.ceil(areaKm2(snapped) * BDNB_PER_KM2));
     const timer = setTimeout(() => {
       queryClient
         .fetchQuery({
-          queryKey: ["bdnb-complet", boundsKey(bounds)],
-          queryFn: ({ signal }) => searchBdnbComplet({ bounds, signal }),
+          queryKey: ["bdnb-complet", boundsKey(snapped), limit],
+          queryFn: ({ signal }) => searchBdnbComplet({ bounds: snapped, limit, signal }),
         })
         .then((rows) => {
           if (cancelled) return;
@@ -125,7 +136,7 @@ export function useViewportBdnb(bounds: Bounds | null): BdnbLookup {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [bounds]);
+  }, [bounds, zoom]);
 
   // biome-ignore lint/suspicious/noExplicitAny: useLiveQuery infers the row type.
   const { data: completData } = useLiveQuery((q: any) => q.from({ c: bdnbCompletCollection }));
