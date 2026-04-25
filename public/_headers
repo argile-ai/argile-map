@@ -6,3 +6,8 @@
 # Built-in basemap workers + scripts that ship with the SPA shell.
 /parse.worker*.js
   Cache-Control: public, max-age=31536000, immutable
+
+# Service worker — must not be long-cached. The browser already enforces
+# 24h max for SW files, but be explicit so updates land on the next reload.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
