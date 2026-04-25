@@ -8,16 +8,25 @@ import { useEffect, useState } from "react";
 import { searchTreesInBounds } from "./api";
 import { queryClient } from "./collections";
 import type { TreeFeature } from "./TreeLayer";
-import type { Bounds } from "./useViewportBuildings";
+import { areaKm2, type Bounds, snapBounds, snapCell } from "./useViewportBuildings";
 
 const DEBOUNCE_MS = 300;
 
+/**
+ * Trees are cheap on the wire (~200 B each) but every tree drops ~40
+ * vertices on the GPU, so a 5 000-tree dense viewport rebuilds 200 k
+ * vertices on every pan. 2 000 is a comfortable upper bound — beyond it
+ * extras stack behind buildings anyway.
+ */
+const TREES_HARD_CAP = 2_000;
+const TREES_PER_KM2 = 1_500;
+
 function boundsKey(b: Bounds): string {
-  const r = (n: number) => Math.round(n * 1e4) / 1e4;
+  const r = (n: number) => n.toFixed(5);
   return `${r(b.minLat)}|${r(b.maxLat)}|${r(b.minLng)}|${r(b.maxLng)}`;
 }
 
-export function useViewportTrees(bounds: Bounds | null): TreeFeature[] {
+export function useViewportTrees(bounds: Bounds | null, zoom = 17): TreeFeature[] {
   const [trees, setTrees] = useState<TreeFeature[]>([]);
 
   useEffect(() => {
@@ -26,11 +35,13 @@ export function useViewportTrees(bounds: Bounds | null): TreeFeature[] {
       return;
     }
     let cancelled = false;
+    const snapped = snapBounds(bounds, snapCell(zoom));
+    const limit = Math.min(TREES_HARD_CAP, Math.ceil(areaKm2(snapped) * TREES_PER_KM2));
     const timer = setTimeout(() => {
       queryClient
         .fetchQuery({
-          queryKey: ["trees", boundsKey(bounds)],
-          queryFn: ({ signal }) => searchTreesInBounds({ bounds, limit: 5000, signal }),
+          queryKey: ["trees", boundsKey(snapped), limit],
+          queryFn: ({ signal }) => searchTreesInBounds({ bounds: snapped, limit, signal }),
           staleTime: 1000 * 60 * 5,
         })
         .then((rows) => {
@@ -56,7 +67,7 @@ export function useViewportTrees(bounds: Bounds | null): TreeFeature[] {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [bounds]);
+  }, [bounds, zoom]);
 
   return trees;
 }
