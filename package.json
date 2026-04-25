@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@deck.gl/core": "^9.2.11",
-    "@deck.gl/layers": "^9.2.11",
     "@deck.gl/mapbox": "^9.2.11",
     "@deck.gl/mesh-layers": "^9.2.11",
     "@tanstack/db": "^0.6.4",

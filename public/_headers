@@ -1,0 +1,8 @@
+# Hashed assets (Vite emits content-hash filenames under /assets/*).
+# These are immutable: a redeploy bumps the hash, so we can cache forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Built-in basemap workers + scripts that ship with the SPA shell.
+/parse.worker*.js
+  Cache-Control: public, max-age=31536000, immutable
