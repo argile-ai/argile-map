@@ -83,9 +83,10 @@ export function AddressSearch({ onSelect }: Props) {
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" && activeIdx >= 0) {
+      } else if (e.key === "Enter") {
+        // Default to the top suggestion when no row has been arrow-keyed.
         e.preventDefault();
-        pick(suggestions[activeIdx]);
+        pick(suggestions[Math.max(activeIdx, 0)]);
       } else if (e.key === "Escape") {
         setOpen(false);
       }
