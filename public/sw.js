@@ -23,7 +23,10 @@
  * incompatibly. The activate hook drops old caches.
  */
 
-const CACHE_VERSION = "v1";
+// Bumped from v1 → v2 (2026-04-27) to invalidate cached responses that came
+// from the misaligned-footprints v2 cityjson cohort. The activate hook drops
+// the old cache namespace.
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `argile-api-${CACHE_VERSION}`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
