@@ -1,16 +1,11 @@
-import { config } from "./config";
+import type { ReactNode } from "react";
 import type { BuildingAnalysis, DpeClass, DpeInfo } from "./argile-api/types";
+import { config } from "./config";
 import { useBuildingAnalysis } from "./useBuildingAnalysis";
 
 type ClickPoint = { lat: number; lng: number };
 
-export function BuildingPopup({
-  click,
-  onClose,
-}: {
-  click: ClickPoint;
-  onClose: () => void;
-}) {
+export function BuildingPopup({ click, onClose }: { click: ClickPoint; onClose: () => void }) {
   const { data, isLoading, error } = useBuildingAnalysis(click);
 
   return (
@@ -48,15 +43,11 @@ function PopupBody({
 }) {
   if (isLoading) return <Loading />;
   if (error) {
-    return (
-      <div style={{ paddingRight: 16, color: "#E53E3E" }}>Erreur : {error.message}</div>
-    );
+    return <div style={{ paddingRight: 16, color: "#E53E3E" }}>Erreur : {error.message}</div>;
   }
   if (!analysis) {
     return (
-      <div style={{ paddingRight: 16, color: "#4A5568" }}>
-        Aucun bâtiment trouvé à cet endroit.
-      </div>
+      <div style={{ paddingRight: 16, color: "#4A5568" }}>Aucun bâtiment trouvé à cet endroit.</div>
     );
   }
   return <Content analysis={analysis} />;
@@ -75,7 +66,7 @@ function Content({ analysis }: { analysis: BuildingAnalysis }) {
   );
 }
 
-function Title({ children }: { children: React.ReactNode }) {
+function Title({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
@@ -161,7 +152,7 @@ function DpeHero({ dpe }: { dpe: DpeInfo | null }) {
   );
 }
 
-function CtaButton({ href, children }: { href: string; children: React.ReactNode }) {
+function CtaButton({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       href={href}

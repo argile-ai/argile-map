@@ -4,11 +4,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import {
-  getViewportStatus,
-  subscribeViewportStatus,
-  type ViewportStatus,
-} from "./collections";
+import { getViewportStatus, subscribeViewportStatus, type ViewportStatus } from "./collections";
 
 export type ViewportStatusSummary = {
   status: ViewportStatus;

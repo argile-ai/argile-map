@@ -117,10 +117,9 @@ export async function getDpeFromBanId(params: {
   signal?: AbortSignal;
 }): Promise<FromBanIdRow[]> {
   const { banId, signal } = params;
-  const response = await fetch(
-    `${config.argileApiUrl}/from-ban-id/${encodeURIComponent(banId)}`,
-    { signal },
-  );
+  const response = await fetch(`${config.argileApiUrl}/from-ban-id/${encodeURIComponent(banId)}`, {
+    signal,
+  });
   if (!response.ok) return [];
   const parsed = fromBanIdResponseSchema.safeParse(await response.json());
   return parsed.success ? parsed.data : [];

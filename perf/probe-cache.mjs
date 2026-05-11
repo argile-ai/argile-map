@@ -76,9 +76,7 @@ async function panToMarseille(page) {
 function summarise(label, run) {
   const total = run.responses.reduce((a, r) => a + Math.max(0, r.bytes), 0);
   console.log(`\n=== ${label} ===`);
-  console.log(
-    `elapsed: ${run.elapsed} ms · total bytes: ${(total / 1024 / 1024).toFixed(2)} MB`,
-  );
+  console.log(`elapsed: ${run.elapsed} ms · total bytes: ${(total / 1024 / 1024).toFixed(2)} MB`);
   for (const r of run.responses) {
     const sizeStr = r.bytes >= 0 ? `${(r.bytes / 1024).toFixed(1).padStart(8)} KB` : "        ?";
     console.log(

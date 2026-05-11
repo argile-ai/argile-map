@@ -298,11 +298,7 @@ export function App() {
   const hoverMeshWithOrigin = useMemo(() => {
     if (!hoveredBuilding) return null;
     const buildingOrigin = { lat: hoveredBuilding.lat, lng: hoveredBuilding.lng };
-    const { body } = mergeBuildingsByMaterial(
-      [hoveredBuilding],
-      buildingOrigin,
-      () => null,
-    );
+    const { body } = mergeBuildingsByMaterial([hoveredBuilding], buildingOrigin, () => null);
     return { mesh: toDeckMesh(body), origin: buildingOrigin };
   }, [hoveredBuilding]);
 
@@ -318,7 +314,16 @@ export function App() {
     out.push(...createDetectionLayer(detections, parsed, origin, { roofWindowMinScore }));
     out.push(...createTreeLayers(trees, { minHeight: treeMinHeight }));
     return out;
-  }, [meshes, origin, hoverMeshWithOrigin, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
+  }, [
+    meshes,
+    origin,
+    hoverMeshWithOrigin,
+    detections,
+    parsed,
+    trees,
+    roofWindowMinScore,
+    treeMinHeight,
+  ]);
 
   const treesDisplayed = useMemo(
     () => trees.filter((t) => t.height_m >= treeMinHeight).length,

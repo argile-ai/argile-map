@@ -89,18 +89,22 @@ function buildCylinderMesh(segments: number = 6): MeshGeom {
   }
   // Side quads
   for (let i = 0; i < segments; i++) {
-    const b0 = i, b1 = (i + 1) % segments;
-    const t0 = segments + i, t1 = segments + (i + 1) % segments;
+    const b0 = i,
+      b1 = (i + 1) % segments;
+    const t0 = segments + i,
+      t1 = segments + ((i + 1) % segments);
     indices.push(b0, b1, t1, b0, t1, t0);
   }
   // Caps
   const bc = positions.length / 3;
-  positions.push(0, 0, 0); normals.push(0, 0, -1);
+  positions.push(0, 0, 0);
+  normals.push(0, 0, -1);
   const tc = positions.length / 3;
-  positions.push(0, 0, 1); normals.push(0, 0, 1);
+  positions.push(0, 0, 1);
+  normals.push(0, 0, 1);
   for (let i = 0; i < segments; i++) {
     indices.push(bc, (i + 1) % segments, i);
-    indices.push(tc, segments + i, segments + (i + 1) % segments);
+    indices.push(tc, segments + i, segments + ((i + 1) % segments));
   }
 
   return {
@@ -115,8 +119,12 @@ function buildCylinderMesh(segments: number = 6): MeshGeom {
 // --- Cached meshes ---
 let _cone: MeshGeom | null = null;
 let _cylinder: MeshGeom | null = null;
-function coneMesh(): MeshGeom { return _cone ?? (_cone = buildConeMesh()); }
-function cylinderMesh(): MeshGeom { return _cylinder ?? (_cylinder = buildCylinderMesh()); }
+function coneMesh(): MeshGeom {
+  return _cone ?? (_cone = buildConeMesh());
+}
+function cylinderMesh(): MeshGeom {
+  return _cylinder ?? (_cylinder = buildCylinderMesh());
+}
 
 // --- Colors ---
 

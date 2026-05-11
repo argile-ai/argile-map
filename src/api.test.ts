@@ -31,10 +31,10 @@ describe("searchBuildingsInBounds", () => {
   it("POSTs a WGS84 polygon to /cityjson/search and returns the buildings", async () => {
     const fetchMock = vi.fn(
       async () =>
-        new Response(
-          JSON.stringify({ count: 1, buildings: [fakeBuilding], query_ms: 3.2 }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
+        new Response(JSON.stringify({ count: 1, buildings: [fakeBuilding], query_ms: 3.2 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 

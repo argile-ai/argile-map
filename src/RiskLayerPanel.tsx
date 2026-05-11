@@ -4,13 +4,14 @@
  * WMS legend image is displayed below the list.
  */
 
+import type { CSSProperties, RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MapRef } from "react-map-gl/maplibre";
-import { RISK_LAYERS, legendUrl, wmsUrl, type RiskLayerDef } from "./riskLayers";
+import { legendUrl, RISK_LAYERS, type RiskLayerDef, wmsUrl } from "./riskLayers";
 
-type Props = {
-  mapRef: React.RefObject<MapRef | null>;
-};
+type Props = Readonly<{
+  mapRef: RefObject<MapRef | null>;
+}>;
 
 function ensureWmsLayer(map: maplibregl.Map, def: RiskLayerDef): void {
   if (map.getSource(def.id)) return;
@@ -102,7 +103,7 @@ export function RiskLayerPanel({ mapRef }: Props) {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   wrapper: {
     position: "absolute",
     top: 12,

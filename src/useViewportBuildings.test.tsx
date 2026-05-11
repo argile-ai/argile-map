@@ -15,7 +15,7 @@ vi.mock("./api", () => ({
 import * as apiMock from "./api";
 import { buildingsCollection, queryClient } from "./collections";
 import type { CityJsonBuilding } from "./types";
-import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
+import { type Bounds, useViewportBuildings } from "./useViewportBuildings";
 
 function fakeBuilding(id: string): CityJsonBuilding {
   return {
@@ -92,8 +92,7 @@ describe("useViewportBuildings", () => {
   });
 
   it("replaces the set when the viewport moves", async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: per-call mock impl.
-    vi.mocked(apiMock.searchBuildingsInBounds).mockImplementation(async (p: any) => {
+    vi.mocked(apiMock.searchBuildingsInBounds).mockImplementation(async (p) => {
       return p.bounds.minLat < 49
         ? [fakeBuilding("paris-1"), fakeBuilding("paris-2")]
         : [fakeBuilding("lille-1")];
