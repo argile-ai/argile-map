@@ -4,22 +4,35 @@ import { z } from "zod";
 export const dpeClassSchema = z.enum(["A", "B", "C", "D", "E", "F", "G"]);
 export type DpeClass = z.infer<typeof dpeClassSchema>;
 
-/** BAN reverse-geocode response, narrowed to the fields we use. */
+/**
+ * BAN reverse-geocode response, narrowed to the fields we use.
+ *
+ * Two coordinate gotchas:
+ *   - `street` is the street name only ("Rue de l'Oppidum"); `name` is the
+ *     housenumber-prefixed full ("21 Rue de l'Oppidum"). Reading `name` as
+ *     the street produces an `adresse_brut` of "21 21 Rue …".
+ *   - `geometry.coordinates` is WGS84 `[lng, lat]`. `properties.x/y` is
+ *     Lambert93 (EPSG:2154). argile-web-ui's `BanFormat.banX/banY` is
+ *     populated from the WGS84 geometry (see `addressHelpers.ts:28-29`),
+ *     and the wizard Map computes its center via
+ *     `{lat: banY, lng: banX}` — so banX must be lng, not Lambert93 X.
+ */
 export const banReverseSchema = z.object({
   features: z
     .array(
       z.object({
+        geometry: z.object({
+          coordinates: z.tuple([z.number(), z.number()]),
+        }),
         properties: z.object({
           label: z.string(),
           id: z.string().optional(),
           postcode: z.string().optional(),
           city: z.string().optional(),
-          name: z.string().optional(),
+          street: z.string().optional(),
           housenumber: z.string().optional(),
           citycode: z.string().optional(),
           type: z.string().optional(),
-          x: z.number().optional(),
-          y: z.number().optional(),
         }),
       }),
     )
@@ -57,6 +70,16 @@ export const leadWithTokenSchema = z.object({
   token: z.string(),
 });
 export type LeadWithToken = z.infer<typeof leadWithTokenSchema>;
+
+/**
+ * `POST /open-data/auto-complete` returns the FlashDiag enriched with
+ * BDNB/cadastre values that the wizard Building step needs (building type,
+ * walls, year, surface, heating, etc.). We pass the whole payload through
+ * to `answer.data` rather than narrow to a brittle subset — the backend
+ * is authoritative on what fields exist.
+ */
+export const enrichedFlashDiagSchema = z.record(z.string(), z.unknown());
+export type EnrichedFlashDiag = z.infer<typeof enrichedFlashDiagSchema>;
 
 /** `POST /answers` returns the created answer; we only need its id. */
 export const answerCreatedSchema = z.object({ id: z.string() });

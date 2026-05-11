@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  autoCompleteOpenData,
   buildBanFormatAddress,
   createAnswer,
   createLead,
@@ -58,21 +59,23 @@ async function runBuildingAnalysis(
   };
 
   const [lead, dpeRows] = await Promise.all([
-    createLead({
-      address: {
-        label: ban?.label ?? fallbackLabel,
-        postcode: ban?.postcode,
-        city: ban?.city,
-        street: ban?.street,
-        lat: building.lat,
-        lng: building.lng,
-      },
-      signal,
-    }),
+    createLead({ address: banFormat ?? undefined, signal }),
     ban?.banId ? getDpeFromBanId({ banId: ban.banId, signal }) : Promise.resolve([]),
   ]);
 
   const officialDpe = pickOfficialDpe(dpeRows);
+
+  // Pre-fetch BDNB/cadastre enrichment so the wizard's Building form lands
+  // with surface/walls/heating/building-type populated. Same call as
+  // argile-web-ui's `useSyncOpenDataAndDpe` makes after the Address step.
+  const enriched = banFormat
+    ? await autoCompleteOpenData({
+        leadToken: lead.token,
+        address: banFormat,
+        geopfId: building.geopf_id,
+        signal,
+      })
+    : null;
 
   const answer = await createAnswer({
     leadToken: lead.token,
@@ -80,6 +83,7 @@ async function runBuildingAnalysis(
     geopfId: building.geopf_id,
     address: banFormat ?? displayAddress,
     officialDpeId: officialDpe?.numero_dpe_audit,
+    enriched,
     signal,
   });
 

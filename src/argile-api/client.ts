@@ -11,6 +11,8 @@ import {
   answerCreatedSchema,
   type BanFormatAddress,
   banReverseSchema,
+  type EnrichedFlashDiag,
+  enrichedFlashDiagSchema,
   type FromBanIdRow,
   fromBanIdResponseSchema,
   type LeadWithToken,
@@ -63,19 +65,23 @@ export async function reverseGeocodeBan(params: {
   if (!response.ok) return null;
   const parsed = banReverseSchema.safeParse(await response.json());
   if (!parsed.success) return null;
-  const p = parsed.data.features[0]?.properties;
-  if (!p) return null;
+  const feature = parsed.data.features[0];
+  if (!feature) return null;
+  const p = feature.properties;
+  const [banLng, banLat] = feature.geometry.coordinates;
   return {
     label: p.label,
     banId: p.id,
     postcode: p.postcode,
     city: p.city,
-    street: p.name,
+    street: p.street,
     housenumber: p.housenumber,
     citycode: p.citycode,
     type: p.type,
-    x: p.x,
-    y: p.y,
+    // `BanFormat.banX/banY` is WGS84 lng/lat (the wizard Map's
+    // `computePosition` reads them as such). Don't put Lambert93 here.
+    x: banLng,
+    y: banLat,
   };
 }
 
@@ -134,29 +140,57 @@ export function pickOfficialDpe(rows: FromBanIdRow[]): FromBanIdRow | null {
   return valid[0];
 }
 
-/** Anonymous lead creation — branchId defaults to argile.ai's main branch. */
+/**
+ * Enrich a sparse FlashDiag with BDNB / cadastre / IGN open-data — same
+ * call as argile-web-ui's `useOpenDataForFlashDiag`. Without this, the
+ * wizard Building form lands with empty fields and sits in its loading
+ * state. Requires the lead's Bearer token.
+ */
+export async function autoCompleteOpenData(params: {
+  leadToken: string;
+  address: BanFormatAddress;
+  geopfId?: string;
+  signal?: AbortSignal;
+}): Promise<EnrichedFlashDiag | null> {
+  const { leadToken, address, geopfId, signal } = params;
+  const body: Record<string, unknown> = { workflow: "oneclick", address };
+  if (geopfId) body.geopfId = geopfId;
+  const response = await fetch(`${config.argileApiUrl}/open-data/auto-complete`, {
+    method: "POST",
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${leadToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) return null;
+  const parsed = enrichedFlashDiagSchema.safeParse(await response.json());
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Anonymous lead creation. `address` must be in BAN format (same shape as
+ * `answer.data.address`) — argile-web-ui validates `lead.address.adresseBrut`
+ * via zod and rejects null. We omit `address` entirely when no BAN match
+ * was available rather than send a sparse one that breaks the wizard.
+ */
 export async function createLead(params: {
-  address: {
-    label: string;
-    postcode?: string;
-    city?: string;
-    street?: string;
-    lat: number;
-    lng: number;
-  };
+  address?: BanFormatAddress;
   signal?: AbortSignal;
 }): Promise<LeadWithToken> {
   const { address, signal } = params;
+  const body: Record<string, unknown> = {
+    branch_id: config.argileBranchId,
+    status_slug: "acquisition_simulateur",
+    tax_shares: 2,
+  };
+  if (address) body.address = address;
   const response = await fetch(`${config.argileApiUrl}/leads`, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      branch_id: config.argileBranchId,
-      status_slug: "acquisition_simulateur",
-      tax_shares: 2,
-      address,
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`api.argile.ai /leads ${response.status}`);
   return leadWithTokenSchema.parse(await response.json());
@@ -173,10 +207,19 @@ export async function createAnswer(params: {
   geopfId: string;
   address: BanFormatAddress | { label: string; lat: number; lng: number };
   officialDpeId?: string;
+  /** Open-data enrichment from `autoCompleteOpenData` — merged into the
+   * answer's `data` so the wizard's Building form lands with surface,
+   * walls, heating, building type, etc. already populated. */
+  enriched?: EnrichedFlashDiag | null;
   signal?: AbortSignal;
 }): Promise<{ id: string }> {
-  const { leadToken, leadId, geopfId, address, officialDpeId, signal } = params;
-  const data: Record<string, unknown> = { workflow: "oneclick", geopfId, address };
+  const { leadToken, leadId, geopfId, address, officialDpeId, enriched, signal } = params;
+  const data: Record<string, unknown> = {
+    ...(enriched ?? {}),
+    workflow: "oneclick",
+    geopfId,
+    address,
+  };
   if (officialDpeId) data.official_dpe_id = officialDpeId;
   const response = await fetch(`${config.argileApiUrl}/answers`, {
     method: "POST",

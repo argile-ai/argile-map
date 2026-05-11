@@ -292,11 +292,19 @@ export function App() {
     return { body: toDeckMesh(body), roofs: roofMeshes };
   }, [hash, origin, bdnb]);
 
-  const hoverMesh = useMemo(() => {
-    if (!hoveredBuilding || !origin) return null;
-    const { body } = mergeBuildingsByMaterial([hoveredBuilding], origin, () => null);
-    return toDeckMesh(body);
-  }, [hoveredBuilding, origin]);
+  // Build the hover mesh anchored at the building's own centroid (not the
+  // shared layer origin) so the `getScale` on the hover layer expands the
+  // shape around its own centre, not a point hundreds of metres away.
+  const hoverMeshWithOrigin = useMemo(() => {
+    if (!hoveredBuilding) return null;
+    const buildingOrigin = { lat: hoveredBuilding.lat, lng: hoveredBuilding.lng };
+    const { body } = mergeBuildingsByMaterial(
+      [hoveredBuilding],
+      buildingOrigin,
+      () => null,
+    );
+    return { mesh: toDeckMesh(body), origin: buildingOrigin };
+  }, [hoveredBuilding]);
 
   const layers = useMemo(() => {
     // biome-ignore lint/suspicious/noExplicitAny: deck.gl Layer generic bleed.
@@ -305,11 +313,12 @@ export function App() {
       out.push(createBuildingLayer(meshes.body, origin));
       out.push(...createRoofMaterialLayers(meshes.roofs, origin));
     }
-    if (hoverMesh && origin) out.push(createBuildingHoverLayer(hoverMesh, origin));
+    if (hoverMeshWithOrigin)
+      out.push(createBuildingHoverLayer(hoverMeshWithOrigin.mesh, hoverMeshWithOrigin.origin));
     out.push(...createDetectionLayer(detections, parsed, origin, { roofWindowMinScore }));
     out.push(...createTreeLayers(trees, { minHeight: treeMinHeight }));
     return out;
-  }, [meshes, origin, hoverMesh, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
+  }, [meshes, origin, hoverMeshWithOrigin, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
 
   const treesDisplayed = useMemo(
     () => trees.filter((t) => t.height_m >= treeMinHeight).length,

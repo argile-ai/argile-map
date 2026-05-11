@@ -78,9 +78,14 @@ export function createBuildingLayer(
 }
 
 /**
- * Highlight overlay for a single building. Renders the same triangle soup
- * with a translucent argile-blue tint, slightly lifted on Z to avoid
- * z-fighting with the body mesh.
+ * Highlight overlay for a single building. The mesh should be built with
+ * the building's own lat/lng as the merge origin (not the shared layer
+ * origin) so vertices are local to the building's centroid — that lets
+ * `getScale` inflate uniformly around the building instead of around a
+ * point hundreds of metres away.
+ *
+ * Inflation (~1.5 %) lifts the surface past z-fighting with the body mesh
+ * underneath; the `+0.05 m` Z bump is belt-and-suspenders.
  */
 export function createBuildingHoverLayer(
   mesh: DeckMesh,
@@ -95,6 +100,7 @@ export function createBuildingHoverLayer(
     coordinateOrigin: [origin.lng, origin.lat, 0],
     getPosition: (d) => d.position,
     getColor: [51, 92, 255, 110],
+    getScale: [1.015, 1.015, 1.015],
     material: { ambient: 0.6, diffuse: 0.8, shininess: 12, specularColor: [80, 90, 110] },
     pickable: false,
     updateTriggers: { mesh },
