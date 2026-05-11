@@ -22,9 +22,7 @@ import type { BuildingAnalysis } from "./argile-api/types";
  *
  * Returns `null` (under `data`) when the click isn't on a building.
  */
-export function useBuildingAnalysis(
-  click: { lat: number; lng: number } | null,
-): {
+export function useBuildingAnalysis(click: { lat: number; lng: number } | null): {
   data: BuildingAnalysis | null | undefined;
   isLoading: boolean;
   error: Error | null;

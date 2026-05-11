@@ -6,6 +6,7 @@
  * which is free, fast, and covers all of France. No API key needed.
  */
 
+import type { CSSProperties, KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Suggestion = {
@@ -75,7 +76,7 @@ export function AddressSearch({ onSelect }: Props) {
   );
 
   const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: KeyboardEvent) => {
       if (!open || suggestions.length === 0) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -135,7 +136,7 @@ export function AddressSearch({ onSelect }: Props) {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   wrapper: {
     position: "absolute",
     top: 12,

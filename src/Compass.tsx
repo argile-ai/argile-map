@@ -4,6 +4,7 @@
  * matching argile-web-ui's InteractiveCompas pattern.
  */
 
+import type { CSSProperties } from "react";
 import { useCallback, useRef } from "react";
 
 type Props = {
@@ -56,33 +57,29 @@ export function Compass({ bearing, onBearingChange }: Props) {
         style={{ cursor: "pointer", display: "block" }}
         onClick={onClick}
       >
-        {/* Background */}
         <circle cx={CX} cy={CY} r={CX - 1} fill="rgba(20,20,30,0.85)" />
 
-        {/* Rotating needle group */}
         <g
           transform={`rotate(${-smoothed}, ${CX}, ${CY})`}
           style={{ transition: "transform 0.4s ease-out" }}
         >
-          {/* North needle (red) */}
-          <polygon
-            points={`${CX},${CY - R + 1} ${CX - 4},${CY} ${CX + 4},${CY}`}
-            fill="#e53e3e"
-          />
-          {/* South needle (dark) */}
-          <polygon
-            points={`${CX},${CY + R - 1} ${CX - 4},${CY} ${CX + 4},${CY}`}
-            fill="#444"
-          />
-          {/* Center dot */}
+          <polygon points={`${CX},${CY - R + 1} ${CX - 4},${CY} ${CX + 4},${CY}`} fill="#e53e3e" />
+          <polygon points={`${CX},${CY + R - 1} ${CX - 4},${CY} ${CX + 4},${CY}`} fill="#444" />
           <circle cx={CX} cy={CY} r={2.5} fill="#888" />
         </g>
 
-        {/* Fixed cardinal labels */}
-        <text {...cardinalStyle(0)} fill="#e53e3e" fontWeight={700}>N</text>
-        <text {...cardinalStyle(90)} fill="#999">E</text>
-        <text {...cardinalStyle(180)} fill="#999">S</text>
-        <text {...cardinalStyle(270)} fill="#999">O</text>
+        <text {...cardinalStyle(0)} fill="#e53e3e" fontWeight={700}>
+          N
+        </text>
+        <text {...cardinalStyle(90)} fill="#999">
+          E
+        </text>
+        <text {...cardinalStyle(180)} fill="#999">
+          S
+        </text>
+        <text {...cardinalStyle(270)} fill="#999">
+          O
+        </text>
       </svg>
     </div>
   );
@@ -101,7 +98,7 @@ function cardinalStyle(angle: number) {
   };
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   wrapper: {
     position: "absolute",
     bottom: 32,

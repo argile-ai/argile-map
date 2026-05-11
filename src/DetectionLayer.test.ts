@@ -60,9 +60,12 @@ function fakeBigBuilding(id: string, lat = 48.86, lng = 2.34): ParsedBuilding {
   };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: deck.gl mesh attributes are loosely typed.
-function quadCenter(layer: any, quadIdx = 0): [number, number, number] {
-  const pos = layer.props.mesh.attributes.positions.value as Float32Array;
+type MeshLayerLike = {
+  props: { mesh: { attributes: { positions: { value: Float32Array } } } };
+};
+
+function quadCenter(layer: MeshLayerLike, quadIdx = 0): [number, number, number] {
+  const pos = layer.props.mesh.attributes.positions.value;
   const base = quadIdx * 12;
   let x = 0,
     y = 0,
@@ -124,7 +127,7 @@ describe("createDetectionLayer", () => {
       lng,
     });
     expect(layers).toHaveLength(1);
-    const [cx, cy, cz] = quadCenter(layers[0]);
+    const [cx, cy, cz] = quadCenter(layers[0] as unknown as MeshLayerLike);
     expect(cx).toBeCloseTo(3, 2);
     expect(cy).toBeCloseTo(4, 2);
     // Flat roof at z=5, SURFACE_OFFSET = 0.05.

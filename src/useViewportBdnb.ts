@@ -127,8 +127,7 @@ export function useViewportBdnb(bounds: Bounds | null): BdnbLookup {
     };
   }, [bounds]);
 
-  // biome-ignore lint/suspicious/noExplicitAny: useLiveQuery infers the row type.
-  const { data: completData } = useLiveQuery((q: any) => q.from({ c: bdnbCompletCollection }));
+  const { data: completData } = useLiveQuery((q) => q.from({ c: bdnbCompletCollection }));
 
   return useMemo<BdnbLookup>(() => {
     const rows = (completData ?? []) as BdnbCompletRow[];

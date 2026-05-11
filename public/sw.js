@@ -32,7 +32,8 @@ const CACHE_NAME = `argile-api-${CACHE_VERSION}`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 const API_HOSTS = new Set(["ai-rgile.argile.ai", "argeme.argile.app"]);
-const CACHEABLE_PATH = /^\/(cityjson\/search|trees\/search|sat\/detections\/search|bdnb\/complet\/bbox)/;
+const CACHEABLE_PATH =
+  /^\/(cityjson\/search|trees\/search|sat\/detections\/search|bdnb\/complet\/bbox)/;
 
 self.addEventListener("install", () => {
   // Activate immediately on first install so users don't need a second
