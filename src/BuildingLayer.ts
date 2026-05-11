@@ -78,6 +78,30 @@ export function createBuildingLayer(
 }
 
 /**
+ * Highlight overlay for a single building. Renders the same triangle soup
+ * with a translucent argile-blue tint, slightly lifted on Z to avoid
+ * z-fighting with the body mesh.
+ */
+export function createBuildingHoverLayer(
+  mesh: DeckMesh,
+  origin: { lat: number; lng: number },
+): SimpleMeshLayer<InstanceDatum> {
+  const data: InstanceDatum[] = [{ position: [0, 0, 0.05] }];
+  return new SimpleMeshLayer<InstanceDatum>({
+    id: "argile-buildings-hover",
+    data,
+    mesh,
+    coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+    coordinateOrigin: [origin.lng, origin.lat, 0],
+    getPosition: (d) => d.position,
+    getColor: [51, 92, 255, 110],
+    material: { ambient: 0.6, diffuse: 0.8, shininess: 12, specularColor: [80, 90, 110] },
+    pickable: false,
+    updateTriggers: { mesh },
+  });
+}
+
+/**
  * One SimpleMeshLayer per roof material, all anchored at the same origin.
  * Split into layers rather than a single mesh with per-vertex colors because
  * SimpleMeshLayer's color channel is per-instance — this also leaves room

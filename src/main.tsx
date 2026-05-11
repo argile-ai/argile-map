@@ -1,6 +1,13 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false, refetchOnWindowFocus: false, staleTime: 5 * 60_000 },
+  },
+});
 
 /**
  * Code splitting: MapLibre + deck.gl + three.js + cityjson-threejs-loader
@@ -24,25 +31,27 @@ if (!root) throw new Error("#root not found");
 
 createRoot(root).render(
   <StrictMode>
-    <Suspense
-      fallback={
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#0b0f14",
-            color: "#c0c8d4",
-            fontFamily: "system-ui, sans-serif",
-          }}
-        >
-          Loading map…
-        </div>
-      }
-    >
-      <App />
-    </Suspense>
+    <QueryClientProvider client={queryClient}>
+      <Suspense
+        fallback={
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#0b0f14",
+              color: "#c0c8d4",
+              fontFamily: "system-ui, sans-serif",
+            }}
+          >
+            Loading map…
+          </div>
+        }
+      >
+        <App />
+      </Suspense>
+    </QueryClientProvider>
   </StrictMode>,
 );

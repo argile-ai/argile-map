@@ -1,10 +1,16 @@
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Map as MapGL, useControl, type MapRef } from "react-map-gl/maplibre";
+import { Map as MapGL, type MapRef, useControl } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { AddressSearch } from "./AddressSearch";
-import { createBuildingLayer, createRoofMaterialLayers, toDeckMesh } from "./BuildingLayer";
+import {
+  createBuildingHoverLayer,
+  createBuildingLayer,
+  createRoofMaterialLayers,
+  toDeckMesh,
+} from "./BuildingLayer";
+import { BuildingPopup } from "./BuildingPopup";
 import { Compass } from "./Compass";
 import type { ParsedBuilding } from "./cityjsonMesh";
 import { config, INITIAL_VIEW } from "./config";
@@ -14,8 +20,9 @@ import { RiskLayerPanel } from "./RiskLayerPanel";
 import { classifyRoofMaterial, type RoofMaterial } from "./roofMaterials";
 import { createTreeLayers } from "./TreeLayer";
 import type { CityJsonBuilding } from "./types";
+import { useHoveredBuilding } from "./useHoveredBuilding";
 import { useViewportBdnb } from "./useViewportBdnb";
-import { useViewportBuildings, type Bounds } from "./useViewportBuildings";
+import { type Bounds, useViewportBuildings } from "./useViewportBuildings";
 import { useViewportDetections } from "./useViewportDetections";
 import { useViewportStatus } from "./useViewportStatus";
 import { useViewportTrees } from "./useViewportTrees";
@@ -156,6 +163,8 @@ export function App() {
   const [roofWindowMinScore, setRoofWindowMinScore] = useState<number>(0.5);
   const [treeMinHeight, setTreeMinHeight] = useState<number>(4);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const [clickPoint, setClickPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [hoverPoint, setHoverPoint] = useState<{ lat: number; lng: number } | null>(null);
   const ROOF_WINDOW_MIN = 0.1;
   const TREE_HEIGHT_MIN = 2.5;
   const TREE_HEIGHT_MAX = 30;
@@ -203,6 +212,29 @@ export function App() {
     mapRef.current?.rotateTo(b, { duration: 300 });
     setBearing(b);
   }, []);
+
+  const onMapClick = useCallback(
+    (e: { lngLat: { lat: number; lng: number } }) => {
+      if (zoom < MIN_ZOOM_FOR_BUILDINGS) return;
+      setClickPoint({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+    },
+    [zoom],
+  );
+
+  const onMapMouseMove = useCallback(
+    (e: { lngLat: { lat: number; lng: number } }) => {
+      if (zoom < MIN_ZOOM_FOR_BUILDINGS) {
+        setHoverPoint(null);
+        return;
+      }
+      setHoverPoint({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+    },
+    [zoom],
+  );
+
+  const onMapMouseLeave = useCallback(() => setHoverPoint(null), []);
+
+  const hoveredBuilding = useHoveredBuilding(parsed, hoverPoint);
 
   // Hide the basemap's shoe-box fill-extrusion building layer when we have
   // real CityJSON meshes. Show it again when we zoom out or have no buildings.
@@ -260,6 +292,12 @@ export function App() {
     return { body: toDeckMesh(body), roofs: roofMeshes };
   }, [hash, origin, bdnb]);
 
+  const hoverMesh = useMemo(() => {
+    if (!hoveredBuilding || !origin) return null;
+    const { body } = mergeBuildingsByMaterial([hoveredBuilding], origin, () => null);
+    return toDeckMesh(body);
+  }, [hoveredBuilding, origin]);
+
   const layers = useMemo(() => {
     // biome-ignore lint/suspicious/noExplicitAny: deck.gl Layer generic bleed.
     const out: any[] = [];
@@ -267,10 +305,11 @@ export function App() {
       out.push(createBuildingLayer(meshes.body, origin));
       out.push(...createRoofMaterialLayers(meshes.roofs, origin));
     }
+    if (hoverMesh && origin) out.push(createBuildingHoverLayer(hoverMesh, origin));
     out.push(...createDetectionLayer(detections, parsed, origin, { roofWindowMinScore }));
     out.push(...createTreeLayers(trees, { minHeight: treeMinHeight }));
     return out;
-  }, [meshes, origin, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
+  }, [meshes, origin, hoverMesh, detections, parsed, trees, roofWindowMinScore, treeMinHeight]);
 
   const treesDisplayed = useMemo(
     () => trees.filter((t) => t.height_m >= treeMinHeight).length,
@@ -285,11 +324,16 @@ export function App() {
         mapStyle={config.mapStyle}
         onMoveEnd={onMoveEnd}
         onLoad={onMoveEnd}
+        onClick={onMapClick}
+        onMouseMove={onMapMouseMove}
+        onMouseLeave={onMapMouseLeave}
+        cursor={hoveredBuilding ? "pointer" : undefined}
         maxPitch={75}
         attributionControl={{ compact: true }}
       >
         <DeckGLOverlay layers={layers} />
       </MapGL>
+      {clickPoint && <BuildingPopup click={clickPoint} onClose={() => setClickPoint(null)} />}
       <AddressSearch onSelect={onAddressSelect} />
       <Compass bearing={bearing} onBearingChange={onCompassBearing} />
       <RiskLayerPanel mapRef={mapRef} />

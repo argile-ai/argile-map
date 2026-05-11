@@ -20,3 +20,9 @@ body,
 canvas {
   outline: none;
 }
+
+@keyframes argile-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

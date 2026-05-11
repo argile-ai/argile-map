@@ -123,4 +123,9 @@ export type BdnbCompletRow = {
   nb_niveau?: number | null;
   hauteur_mean?: number | null;
   usage_principal_bdnb_open?: string | null;
+  classe_bilan_dpe?: string | null;
+  conso_5_usages_ep_m2?: number | null;
+  emission_ges_5_usages_m2?: number | null;
+  type_energie_chauffage?: string | null;
+  surface_emprise_sol?: number | null;
 };

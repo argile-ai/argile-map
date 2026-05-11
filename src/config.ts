@@ -11,6 +11,9 @@ export const config = {
   argemeUrl: import.meta.env.DEV
     ? "/argeme"
     : (import.meta.env.VITE_ARGEME_API_URL ?? "https://argeme.argile.app"),
+  argileApiUrl: import.meta.env.VITE_ARGILE_BUSINESS_API_URL ?? "https://api.argile.ai",
+  argileWebUrl: import.meta.env.VITE_ARGILE_WEB_URL ?? "https://app.argile.ai",
+  argileBranchId: import.meta.env.VITE_ARGILE_BRANCH_ID ?? "5d1f455c-91e9-43f8-9fcc-f028b42e23cb",
   mapStyle: import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty",
 } as const;
 
