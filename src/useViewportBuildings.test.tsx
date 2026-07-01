@@ -19,7 +19,7 @@ import { type Bounds, useViewportBuildings } from "./useViewportBuildings";
 
 function fakeBuilding(id: string): CityJsonBuilding {
   return {
-    geopf_id: id,
+    cleabs: id,
     lat: 48.8566,
     lng: 2.3522,
     multipolygon_geojson: {
@@ -44,7 +44,7 @@ function Harness({ bounds }: { bounds: Bounds | null }) {
     <div>
       <span data-testid="ids">
         {buildings
-          .map((b) => b.geopf_id)
+          .map((b) => b.cleabs)
           .sort()
           .join(",")}
       </span>
@@ -55,7 +55,7 @@ function Harness({ bounds }: { bounds: Bounds | null }) {
 describe("useViewportBuildings", () => {
   beforeEach(() => {
     for (const b of [...buildingsCollection.values()]) {
-      buildingsCollection.delete(b.geopf_id);
+      buildingsCollection.delete(b.cleabs);
     }
     queryClient.clear();
     vi.mocked(apiMock.searchBuildingsInBounds).mockReset();

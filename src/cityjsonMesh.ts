@@ -106,7 +106,7 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
     // biome-ignore lint/suspicious/noExplicitAny: untyped GitHub build.
     (parser as any).parse(building.cityjson, group);
   } catch (err) {
-    console.warn("CityJSON parse failed for", building.geopf_id, err);
+    console.warn("CityJSON parse failed for", building.cleabs, err);
     return null;
   }
 
@@ -210,7 +210,7 @@ export function parseBuilding(building: CityJsonBuilding): ParsedBuilding | null
     Array.isArray(ext) && ext.length >= 6 ? [(ext[0] + ext[3]) / 2, (ext[1] + ext[4]) / 2] : null;
 
   return {
-    geopf_id: building.geopf_id,
+    cleabs: building.cleabs,
     lat: building.lat,
     lng: building.lng,
     lambert93Center,

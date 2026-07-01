@@ -43,7 +43,7 @@ function DeckGLOverlay({ layers }: { layers: any[] }): null {
 /**
  * Parse CityJSON in a Web Worker pool so the main thread isn't blocked
  * while panning over dense neighborhoods. The hook keeps a persistent
- * cache keyed by geopf_id and returns only the buildings that have
+ * cache keyed by cleabs and returns only the buildings that have
  * finished parsing — deck.gl re-renders smoothly as more come in.
  *
  * This is an incremental update model: we never re-parse a building we
@@ -60,8 +60,8 @@ function useParsedBuildings(buildings: CityJsonBuilding[]): ParsedBuilding[] {
     const currentKeys = new Set<string>();
     const toParse: CityJsonBuilding[] = [];
     for (const b of buildings) {
-      currentKeys.add(b.geopf_id);
-      if (!cache.has(b.geopf_id)) toParse.push(b);
+      currentKeys.add(b.cleabs);
+      if (!cache.has(b.cleabs)) toParse.push(b);
     }
     // Evict buildings no longer visible. We bump the version even if no new
     // buildings arrived, so the component re-renders and the layer drops
@@ -80,8 +80,8 @@ function useParsedBuildings(buildings: CityJsonBuilding[]): ParsedBuilding[] {
       parseBuildingAsync(b).then((parsed) => {
         if (cancelled || !parsed) return;
         // Only write it if the building is still in the viewport.
-        if (!currentKeys.has(parsed.geopf_id)) return;
-        cache.set(parsed.geopf_id, parsed);
+        if (!currentKeys.has(parsed.cleabs)) return;
+        cache.set(parsed.cleabs, parsed);
         setVersion((v) => v + 1);
       });
     }
@@ -94,7 +94,7 @@ function useParsedBuildings(buildings: CityJsonBuilding[]): ParsedBuilding[] {
     const cache = cacheRef.current;
     const out: ParsedBuilding[] = [];
     for (const b of buildings) {
-      const parsed = cache.get(b.geopf_id);
+      const parsed = cache.get(b.cleabs);
       if (parsed) out.push(parsed);
     }
     return out;
@@ -141,7 +141,7 @@ function useFrozenOrigin(
 function buildingsHash(buildings: ParsedBuilding[]): string {
   // Sort + join is fine — N is at most a few thousand per viewport.
   return buildings
-    .map((b) => b.geopf_id)
+    .map((b) => b.cleabs)
     .sort()
     .join("|");
 }

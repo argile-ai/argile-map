@@ -54,7 +54,7 @@ function ensureWorkers(): Worker[] {
         return;
       }
       cb.resolve({
-        geopf_id: id.split("|", 2)[1] ?? "",
+        cleabs: id.split("|", 2)[1] ?? "",
         lat: result.lat,
         lng: result.lng,
         lambert93Center: result.lambert93Center,
@@ -82,7 +82,7 @@ export function parseBuildingAsync(building: CityJsonBuilding): Promise<ParsedBu
   const worker = pool[nextWorker % pool.length];
   nextWorker++;
   // Encode the building key into the id so onmessage can reconstruct it.
-  const id = `${nextId++}|${building.geopf_id}`;
+  const id = `${nextId++}|${building.cleabs}`;
   return new Promise((resolve) => {
     pending.set(id, { resolve });
     worker.postMessage({ id, building });

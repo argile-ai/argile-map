@@ -25,7 +25,7 @@ function det(
 
 function fakeBuilding(id: string, lat = 48.86, lng = 2.34): ParsedBuilding {
   return {
-    geopf_id: id,
+    cleabs: id,
     lat,
     lng,
     height: 6,
@@ -44,7 +44,7 @@ function fakeBuilding(id: string, lat = 48.86, lng = 2.34): ParsedBuilding {
 /** 20×20m flat roof centered at (0,0), z=5. Two triangles. */
 function fakeBigBuilding(id: string, lat = 48.86, lng = 2.34): ParsedBuilding {
   return {
-    geopf_id: id,
+    cleabs: id,
     lat,
     lng,
     height: 6,
