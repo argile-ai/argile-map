@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchBuildingsInBounds, searchDetectionsByBounds } from "./api";
 
 const fakeBuilding = {
-  geopf_id: "batiment.1",
+  cleabs: "batiment.1",
   lat: 48.8566,
   lng: 2.3522,
   multipolygon_geojson: {
@@ -44,7 +44,7 @@ describe("searchBuildingsInBounds", () => {
     });
 
     expect(out).toHaveLength(1);
-    expect(out[0].geopf_id).toBe("batiment.1");
+    expect(out[0].cleabs).toBe("batiment.1");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];

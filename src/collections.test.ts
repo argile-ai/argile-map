@@ -10,7 +10,7 @@ import type { CityJsonBuilding } from "./types";
 
 function fakeBuilding(id: string): CityJsonBuilding {
   return {
-    geopf_id: id,
+    cleabs: id,
     lat: 48.8566,
     lng: 2.3522,
     multipolygon_geojson: {
@@ -32,27 +32,27 @@ function fakeBuilding(id: string): CityJsonBuilding {
 describe("setViewportBuildings", () => {
   beforeEach(() => {
     for (const b of [...buildingsCollection.values()]) {
-      buildingsCollection.delete(b.geopf_id);
+      buildingsCollection.delete(b.cleabs);
     }
   });
 
   it("inserts every building from an empty collection", () => {
     setViewportBuildings([fakeBuilding("a"), fakeBuilding("b")]);
-    const ids = [...buildingsCollection.values()].map((b) => b.geopf_id).sort();
+    const ids = [...buildingsCollection.values()].map((b) => b.cleabs).sort();
     expect(ids).toEqual(["a", "b"]);
   });
 
   it("replaces the set atomically: drops missing, adds new, keeps shared", () => {
     setViewportBuildings([fakeBuilding("a"), fakeBuilding("b"), fakeBuilding("c")]);
     setViewportBuildings([fakeBuilding("b"), fakeBuilding("c"), fakeBuilding("d")]);
-    const ids = [...buildingsCollection.values()].map((b) => b.geopf_id).sort();
+    const ids = [...buildingsCollection.values()].map((b) => b.cleabs).sort();
     expect(ids).toEqual(["b", "c", "d"]);
   });
 
   it("is idempotent when called with the same set twice", () => {
     setViewportBuildings([fakeBuilding("a"), fakeBuilding("b")]);
     setViewportBuildings([fakeBuilding("a"), fakeBuilding("b")]);
-    const ids = [...buildingsCollection.values()].map((b) => b.geopf_id).sort();
+    const ids = [...buildingsCollection.values()].map((b) => b.cleabs).sort();
     expect(ids).toEqual(["a", "b"]);
   });
 

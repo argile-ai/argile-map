@@ -21,9 +21,9 @@ import {
 } from "./mergeBuildings";
 
 /** Build a ParsedBuilding with a single unit triangle at the origin. */
-function unitTriangle(geopf_id: string, lat: number, lng: number): ParsedBuilding {
+function unitTriangle(cleabs: string, lat: number, lng: number): ParsedBuilding {
   return {
-    geopf_id,
+    cleabs,
     lat,
     lng,
     height: 5,
@@ -90,14 +90,14 @@ describe("mergeBuildings", () => {
 
 describe("mergeBuildingsByMaterial", () => {
   /** Build a two-triangle parsed building: one wall (type 1), one roof (type 2). */
-  function wallAndRoof(geopf_id: string, lat: number, lng: number): ParsedBuilding {
+  function wallAndRoof(cleabs: string, lat: number, lng: number): ParsedBuilding {
     // 6 vertices total — verts 0..2 form the wall triangle, 3..5 the roof.
     const wallVerts = [0, 0, 0, 1, 0, 0, 0, 0, 5];
     const roofVerts = [0, 0, 5, 1, 0, 5, 1, 1, 5];
     const wallN = [0, -1, 0, 0, -1, 0, 0, -1, 0];
     const roofN = [0, 0, 1, 0, 0, 1, 0, 0, 1];
     return {
-      geopf_id,
+      cleabs,
       lat,
       lng,
       height: 5,
@@ -141,7 +141,7 @@ describe("mergeBuildingsByMaterial", () => {
     const a = wallAndRoof("a", origin.lat, origin.lng);
     const b = wallAndRoof("b", origin.lat + 0.0005, origin.lng + 0.001);
     const { roofsByMaterial } = mergeBuildingsByMaterial([a, b], origin, (pb) =>
-      pb.geopf_id === "a" ? ("tuiles" as const) : ("ardoises" as const),
+      pb.cleabs === "a" ? ("tuiles" as const) : ("ardoises" as const),
     );
     expect(roofsByMaterial.get("tuiles")!.positions.length).toBe(9);
     expect(roofsByMaterial.get("ardoises")!.positions.length).toBe(9);

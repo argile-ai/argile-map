@@ -1,7 +1,9 @@
 /** Geo types. Matches the `app/schemas/cityjson.py` pydantic models. */
 
 export type CityJsonBuilding = {
-  geopf_id: string;
+  /** BD TOPO absolute key ("BATIMENT0000000…"), the building's stable id
+   * from /cityjson/search (previously `geopf_id`, the WFS feature id). */
+  cleabs: string;
   lat: number;
   lng: number;
   multipolygon_geojson: GeoJSON.MultiPolygon | GeoJSON.Polygon;

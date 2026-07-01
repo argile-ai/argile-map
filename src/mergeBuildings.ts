@@ -57,7 +57,7 @@ export type TriangleSoup = {
 };
 
 export type ParsedBuilding = {
-  geopf_id: string;
+  cleabs: string;
   /** WGS84 centroid of the building, used as the anchor for the local frame. */
   lat: number;
   lng: number;

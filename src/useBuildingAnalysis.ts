@@ -70,7 +70,7 @@ async function runBuildingAnalysis(
     ? await autoCompleteOpenData({
         leadToken: lead.token,
         address: banFormat,
-        geopfId: building.geopf_id,
+        geopfId: building.cleabs,
         signal,
       })
     : null;
@@ -78,7 +78,7 @@ async function runBuildingAnalysis(
   const answer = await createAnswer({
     leadToken: lead.token,
     leadId: lead.id,
-    geopfId: building.geopf_id,
+    geopfId: building.cleabs,
     address: banFormat ?? displayAddress,
     officialDpeId: officialDpe?.numero_dpe_audit,
     enriched,
@@ -108,7 +108,7 @@ async function runBuildingAnalysis(
   }
 
   return {
-    building: { geopfId: building.geopf_id, lat: building.lat, lng: building.lng },
+    building: { geopfId: building.cleabs, lat: building.lat, lng: building.lng },
     address: displayAddress,
     dpe,
     answerId: answer.id,

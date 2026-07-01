@@ -24,7 +24,7 @@ import type { CityJsonBuilding } from "./types";
  */
 function boxBuilding(): CityJsonBuilding {
   return {
-    geopf_id: "batiment.test",
+    cleabs: "batiment.test",
     lat: 48.8613,
     lng: 2.3421,
     multipolygon_geojson: {
@@ -137,7 +137,7 @@ describe("parseBuilding (loader integration)", () => {
     if (!parsed) throw new Error("parseBuilding returned null");
     expect(parsed.lat).toBeCloseTo(48.8613, 6);
     expect(parsed.lng).toBeCloseTo(2.3421, 6);
-    expect(parsed.geopf_id).toBe("batiment.test");
+    expect(parsed.cleabs).toBe("batiment.test");
   });
 
   it("returns null on malformed CityJSON", () => {

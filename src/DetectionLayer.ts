@@ -423,11 +423,11 @@ function buildDetectionMesh(
   // Group detections by building.
   const byBuilding = new Map<string, { building: ParsedBuilding; detections: Detection[] }>();
   for (const m of matched) {
-    const entry = byBuilding.get(m.building.geopf_id);
+    const entry = byBuilding.get(m.building.cleabs);
     if (entry) {
       entry.detections.push(m.detection);
     } else {
-      byBuilding.set(m.building.geopf_id, {
+      byBuilding.set(m.building.cleabs, {
         building: m.building,
         detections: [m.detection],
       });

@@ -40,7 +40,7 @@ export const queryClient = new QueryClient({
 export const buildingsCollection = createCollection(
   localOnlyCollectionOptions<CityJsonBuilding, string>({
     id: "buildings",
-    getKey: (b) => b.geopf_id,
+    getKey: (b) => b.cleabs,
   }),
 );
 
@@ -99,18 +99,18 @@ export function setViewportError(message: string): void {
  * matter — the merge + render pipeline reads the full set.
  */
 export function setViewportBuildings(buildings: CityJsonBuilding[]): void {
-  const nextKeys = new Set(buildings.map((b) => b.geopf_id));
+  const nextKeys = new Set(buildings.map((b) => b.cleabs));
 
   // Delete buildings that are no longer visible.
   for (const existing of [...buildingsCollection.values()]) {
-    if (!nextKeys.has(existing.geopf_id)) {
-      buildingsCollection.delete(existing.geopf_id);
+    if (!nextKeys.has(existing.cleabs)) {
+      buildingsCollection.delete(existing.cleabs);
     }
   }
   // Insert new ones. local-only collections throw on duplicate keys, so
   // we skip buildings already present (they were re-sent for the same ids).
   for (const b of buildings) {
-    if (!buildingsCollection.has(b.geopf_id)) {
+    if (!buildingsCollection.has(b.cleabs)) {
       buildingsCollection.insert(b);
     }
   }
