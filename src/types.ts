@@ -96,8 +96,12 @@ export type Tree = {
   height_m: number;
   crown_diameter_m: number;
   crown_area_m2: number;
-  n_points: number;
-  is_conifer: boolean;
+  /**
+   * Absent from the national dataset that now backs `/trees/search`: both
+   * came from the April extraction, which covered a fifth of the country.
+   */
+  n_points: number | null;
+  is_conifer: boolean | null;
 };
 
 export type TreeSearchResponse = {

@@ -130,15 +130,17 @@ export async function searchBdnbComplet(params: {
 /**
  * Search trees extracted from IGN LIDAR HD inside the current viewport.
  * Routed through Traefik's `/trees` stripprefix → trees-api `/search`.
+ *
+ * There is no conifer filter: the national dataset carries no such flag, and
+ * the endpoint answers a 400 rather than quietly returning every tree.
  */
 export async function searchTreesInBounds(params: {
   bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
   minHeight?: number;
-  isConifer?: boolean;
   limit?: number;
   signal?: AbortSignal;
 }): Promise<Tree[]> {
-  const { bounds, minHeight = 0, isConifer, limit = 5000, signal } = params;
+  const { bounds, minHeight = 0, limit = 5000, signal } = params;
   const polygon = {
     type: "Polygon" as const,
     coordinates: [
@@ -159,7 +161,6 @@ export async function searchTreesInBounds(params: {
       geometry: polygon,
       crs: "EPSG:4326",
       min_height_m: minHeight,
-      is_conifer: isConifer,
       limit,
     }),
   });

@@ -15,8 +15,8 @@ export type TreeFeature = {
   height_m: number;
   crown_diameter_m: number;
   crown_area_m2: number;
-  is_conifer: boolean;
-  n_points: number;
+  is_conifer: boolean | null;
+  n_points: number | null;
 };
 
 // --- Mesh generation ---
@@ -162,12 +162,15 @@ export function createTreeLayers(
 
   // Crown: cone at trunk top, scaled by crown radius and crown height
   const crownData: TreeInstance[] = trees_.map((t) => {
-    const crownH = t.height_m * (t.is_conifer ? 0.7 : 0.5);
+    // The national dataset carries no conifer flag: an unknown crown is drawn
+    // as broadleaf, which is what the falsy null did implicitly.
+    const conifer = t.is_conifer ?? false;
+    const crownH = t.height_m * (conifer ? 0.7 : 0.5);
     const r = Math.max(0.5, t.crown_diameter_m / 2);
     const trunkH = t.height_m - crownH;
     return {
       position: t.position,
-      color: crownColor(t.height_m, t.is_conifer),
+      color: crownColor(t.height_m, conifer),
       scale: [r, r, crownH],
       translation: [0, 0, trunkH],
     };
@@ -175,7 +178,7 @@ export function createTreeLayers(
 
   // Trunk: thin cylinder from ground
   const trunkData: TreeInstance[] = trees_.map((t) => {
-    const trunkH = t.height_m * (t.is_conifer ? 0.3 : 0.5);
+    const trunkH = t.height_m * ((t.is_conifer ?? false) ? 0.3 : 0.5);
     return {
       position: t.position,
       color: [120, 80, 40],
